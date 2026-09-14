@@ -1,0 +1,17 @@
+# 运行数据（数据库、附件、备份）——不要提交
+data/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+_probe.txt
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 代理/助手工作记忆（含账号密码等敏感信息，禁止提交）
+.workbuddy/memory/

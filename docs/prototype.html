@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>行知教研吧 · 界面原型</title>
+<style>
+  :root{
+    --ink:#1F2328; --muted:#6B7280; --faint:#9CA3AF;
+    --line:#E5E7EB; --line2:#D1D5DB;
+    --bg:#F6F7F9; --card:#FFFFFF; --soft:#F3F4F6;
+    --brand:#185FA5; --brand2:#E6F1FB; --brand3:#0C447C;
+    --ok:#1D9E75; --ok2:#E1F5EE;
+    --warn:#BA7517; --warn2:#FAEEDA;
+    --danger:#E24B4A; --danger2:#FCEBEB;
+    --purple:#534AB7; --purple2:#EEEDFE;
+    --r:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:400 14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ---- 顶栏 ---- */
+  .topbar{position:sticky;top:0;z-index:20;height:56px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:24px;padding:0 24px}
+  .logo{display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;white-space:nowrap}
+  .logo .dot{width:22px;height:22px;border-radius:7px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+  .nav{display:flex;gap:4px;margin-left:8px}
+  .nav button{background:none;border:0;font:inherit;color:var(--muted);padding:6px 12px;border-radius:8px;cursor:pointer}
+  .nav button:hover{background:var(--soft);color:var(--ink)}
+  .nav button.on{background:var(--brand2);color:var(--brand3);font-weight:500}
+  .topbar .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+  .search{width:200px;height:32px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:13px;background:var(--soft)}
+  .bell{position:relative;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted)}
+  .bell:hover{background:var(--soft)}
+  .bell .badge{position:absolute;top:2px;right:2px;min-width:15px;height:15px;border-radius:8px;background:var(--danger);color:#fff;font-size:10px;line-height:15px;text-align:center;padding:0 3px}
+  .me{display:flex;align-items:center;gap:8px;cursor:pointer;padding-left:14px;border-left:1px solid var(--line)}
+  .av{width:28px;height:28px;border-radius:50%;background:var(--brand2);color:var(--brand3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex:none}
+  .av.lg{width:40px;height:40px;font-size:14px}
+  .av.sm{width:24px;height:24px;font-size:11px}
+  .me .nm{font-size:13px}
+
+  /* ---- 布局 ---- */
+  .wrap{max-width:1120px;margin:0 auto;padding:24px}
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px}
+  .card+.card{margin-top:16px}
+  .crumb{font-size:13px;color:var(--faint);margin-bottom:12px}
+  h1{font-size:20px;font-weight:500;margin:0 0 6px}
+  h2{font-size:15px;font-weight:500;margin:0 0 14px;display:flex;align-items:center;gap:8px}
+  h3{font-size:14px;font-weight:500;margin:0 0 8px}
+  .muted{color:var(--muted);font-size:13px}
+  .sec-title{font-size:13px;color:var(--faint);margin:0 0 10px;letter-spacing:.03em}
+
+  /* ---- 通用零件 ---- */
+  .tag{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;line-height:20px;white-space:nowrap}
+  .tag.task{background:var(--brand2);color:var(--brand3)}
+  .tag.pin{background:var(--danger2);color:#A32D2D}
+  .tag.notice{background:var(--warn2);color:#854F0B}
+  .tag.ok{background:var(--ok2);color:#0F6E56}
+  .tag.todo{background:var(--soft);color:var(--muted)}
+  .tag.doing{background:var(--warn2);color:#854F0B}
+  .tag.done{background:var(--brand2);color:var(--brand3)}
+  .tag.rej{background:var(--danger2);color:#A32D2D}
+  .tag.grp{background:var(--purple2);color:#3C3489}
+  .btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+  .btn:hover{background:var(--soft)}
+  .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.pri:hover{background:var(--brand3)}
+  .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.sm{height:28px;padding:0 10px;font-size:12px}
+  .row{display:flex;align-items:center;gap:10px}
+  .grow{margin-left:auto}
+  .divider{height:1px;background:var(--line);margin:16px 0}
+
+  /* ---- 课题组卡片 ---- */
+  .bcard{display:block;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-bottom:14px;color:inherit}
+  .bcard:hover{border-color:var(--line2);text-decoration:none}
+  .bcard .nm{font-size:16px;font-weight:500;margin-bottom:6px}
+  .bcard .desc{color:var(--muted);font-size:13px;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .avatars{display:flex}
+  .avatars .av{margin-left:-6px;border:2px solid var(--card)}
+  .avatars .av:first-child{margin-left:0}
+
+  /* ---- 话题列表 ---- */
+  .tlist{display:flex;flex-direction:column}
+  .trow{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+  .trow:last-child{border-bottom:0;padding-bottom:4px}
+  .trow .main{min-width:0;flex:1}
+  .trow .ttl{font-size:14px;font-weight:500;margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .trow .meta{font-size:12px;color:var(--faint);display:flex;gap:14px;flex-wrap:wrap}
+  .trow .cnt{flex:none;text-align:right;font-size:12px;color:var(--faint);min-width:64px}
+  .trow .cnt b{display:block;font-size:15px;font-weight:500;color:var(--ink)}
+
+  /* ---- 任务卡 ---- */
+  .taskcard{border:1px solid #B5D4F4;background:#F7FBFF;border-radius:var(--r);padding:16px 18px}
+  .tmeta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+  .tmeta .lbl{font-size:12px;color:var(--faint);margin-bottom:3px}
+  .tmeta .val{font-size:13px}
+  .due.over{color:var(--danger);font-weight:500}
+
+  /* ---- 楼层 ---- */
+  .post{display:flex;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}
+  .post:last-child{border-bottom:0}
+  .post .body{flex:1;min-width:0}
+  .post .head{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px}
+  .post .head .who{font-weight:500}
+  .floor{margin-left:auto;font-size:12px;color:var(--faint)}
+  .sub{margin-top:10px;margin-left:0;background:var(--soft);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted)}
+  .editor{border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--faint);font-size:13px;background:var(--card)}
+  .drop{margin-top:10px;border:1px dashed var(--line2);border-radius:8px;padding:14px;text-align:center;font-size:13px;color:var(--faint);background:var(--soft)}
+  .files{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .file{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px}
+  .file .ic{width:26px;height:26px;border-radius:6px;background:var(--brand2);color:var(--brand3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex:none}
+  .file .sz{color:var(--faint);font-size:12px;margin-left:auto}
+
+  /* ---- 侧栏 ---- */
+  .side-item{padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .side-item:last-child{border-bottom:0;padding-bottom:0}
+  .side-item .t{display:block;margin-bottom:3px}
+  .side-item .s{font-size:12px;color:var(--faint)}
+  .metric{background:var(--soft);border-radius:8px;padding:12px 14px;text-align:center}
+  .metric .n{font-size:22px;font-weight:500;line-height:1.2}
+  .metric .l{font-size:12px;color:var(--muted)}
+  .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+
+  /* ---- 表单 ---- */
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:13px;margin-bottom:6px}
+  .field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;font-size:13px;background:var(--card)}
+  .field .hint{font-size:12px;color:var(--faint);margin-top:5px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;padding:4px 12px 4px 5px;font-size:13px;background:var(--card)}
+  .chip.on{border-color:var(--brand);background:var(--brand2);color:var(--brand3)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:var(--card);font:inherit;font-size:13px;padding:7px 14px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--brand2);color:var(--brand3);font-weight:500}
+  .screen{display:none}
+  .screen.on{display:block}
+  .tip{margin:0 0 16px;background:var(--warn2);color:#854F0B;font-size:12px;padding:8px 12px;border-radius:8px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><span class="dot">行</span>行知教研吧</div>
+  <div class="nav">
+    <button data-go="plaza" class="on">课题组广场</button>
+    <button data-go="mytasks">我的任务</button>
+    <button data-go="topic">话题示例</button>
+    <button data-go="newtask">发任务</button>
+  </div>
+  <div class="right">
+    <input class="search" placeholder="搜索话题 / 任务 / 附件">
+    <div class="bell">通知<span class="badge">3</span></div>
+    <div class="me"><span class="av">吴</span><span class="nm">吴老师</span></div>
+  </div>
+</div>
+
+<!-- ========== 1. 课题组广场 ========== -->
+<div class="screen on" id="plaza">
+<div class="wrap"><div class="cols">
+  <div>
+    <div class="row" style="margin-bottom:16px">
+      <div class="seg">
+        <button class="on">全部课题组</button><button>我参与的</button><button>公开组</button>
+      </div>
+      <button class="btn pri grow" style="margin-left:auto;flex:none">＋ 创建课题组</button>
+    </div>
+
+    <a class="bcard" href="#" data-go="board">
+      <div class="row" style="margin-bottom:8px">
+        <span class="tag grp">省级课题</span>
+        <span class="tag task">进行中</span>
+        <span class="muted grow" style="font-size:12px">最近更新 12 分钟前</span>
+      </div>
+      <div class="nm">核心素养导向的高中信息技术项目式学习实践研究</div>
+      <div class="desc">2025 年度江苏省教育科学规划课题。本组负责课例设计、数据采集与阶段性成果整理，每两周一次集中研讨。</div>
+      <div class="row" style="font-size:13px">
+        <div class="avatars">
+          <span class="av">张</span><span class="av">吴</span><span class="av">李</span><span class="av">陈</span><span class="av">＋4</span>
+        </div>
+        <span class="muted grow">组长：张老师（信息组）</span>
+        <span class="muted">话题 26 · 任务 9</span>
+      </div>
+    </a>
+
+    <a class="bcard" href="#">
+      <div class="row" style="margin-bottom:8px">
+        <span class="tag grp">市级课题</span>
+        <span class="tag notice">材料整理</span>
+        <span class="muted grow" style="font-size:12px">最近更新 昨天 16:40</span>
+      </div>
+      <div class="nm">基于 Python 的高中算法思维培养路径研究</div>
+      <div class="desc">正在准备中期材料，需提交教学案例 3 篇、学生作品集与课堂观察记录。</div>
+      <div class="row" style="font-size:13px">
+        <div class="avatars"><span class="av">周</span><span class="av">吴</span><span class="av">王</span></div>
+        <span class="muted grow">组长：周老师（教科室）</span>
+        <span class="muted">话题 14 · 任务 5</span>
+      </div>
+    </a>
+
+    <a class="bcard" href="#">
+      <div class="row" style="margin-bottom:8px">
+        <span class="tag todo">综合组</span>
+        <span class="muted grow" style="font-size:12px">最近更新 3 天前</span>
+      </div>
+      <div class="nm">信息组日常教研 · 公开课与集体备课</div>
+      <div class="desc">组内通知、公开课安排、集体备课资料共享。</div>
+      <div class="row" style="font-size:13px">
+        <div class="avatars"><span class="av">李</span><span class="av">吴</span><span class="av">赵</span><span class="av">孙</span></div>
+        <span class="muted grow">组长：李老师（信息组）</span>
+        <span class="muted">话题 58 · 任务 3</span>
+      </div>
+    </a>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>我的待办任务<span class="tag rej">2 项逾期</span></h2>
+      <div class="side-item">
+        <span class="t">撰写《项目式学习课例》初稿</span>
+        <span class="s">省级课题 · <span style="color:#E24B4A">逾期 2 天</span></span>
+      </div>
+      <div class="side-item">
+        <span class="t">提交学生问卷原始数据</span>
+        <span class="s">省级课题 · 还剩 3 天</span>
+      </div>
+      <div class="side-item">
+        <span class="t">整理中期教学案例 3 篇</span>
+        <span class="s">市级课题 · 还剩 9 天</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>最新回复</h2>
+      <div class="side-item">
+        <span class="t">张老师 回复了「课例框架讨论」</span>
+        <span class="s">省级课题 · 12 分钟前</span>
+      </div>
+      <div class="side-item">
+        <span class="t">李老师 提交了任务附件</span>
+        <span class="s">省级课题 · 1 小时前</span>
+      </div>
+      <div class="side-item">
+        <span class="t">周老师 发布了新任务「中期报告排版」</span>
+        <span class="s">市级课题 · 昨天 16:40</span>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<!-- ========== 2. 课题组详情 ========== -->
+<div class="screen" id="board">
+<div class="wrap">
+  <div class="crumb"><a href="#" data-go="plaza">课题组广场</a> / 省级课题</div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="row" style="margin-bottom:10px">
+      <span class="tag grp">省级课题</span>
+      <span class="tag ok">进行中</span>
+      <button class="btn sm grow" style="margin-left:auto;flex:none">组成员</button>
+      <button class="btn sm" style="flex:none">＋ 发布</button>
+    </div>
+    <h1 style="margin-bottom:8px">核心素养导向的高中信息技术项目式学习实践研究</h1>
+    <div class="muted" style="margin-bottom:14px">2025 年度江苏省教育科学规划课题 · 组长：张老师 · 组员 7 人 · 建于 2025-09-01</div>
+    <div class="metrics">
+      <div class="metric"><div class="n">26</div><div class="l">话题</div></div>
+      <div class="metric"><div class="n">9</div><div class="l">任务</div></div>
+      <div class="metric"><div class="n">78%</div><div class="l">任务完成率</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <div class="seg">
+        <button class="on">全部</button><button>任务</button><button>讨论</button><button>公告</button>
+      </div>
+      <select class="grow" style="margin-left:auto;max-width:150px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px">
+        <option>最新回复</option><option>发布时间</option>
+      </select>
+    </div>
+
+    <div class="tlist">
+      <div class="trow">
+        <div class="main">
+          <div class="ttl"><span class="tag pin">置顶</span><span class="tag task">任务</span>撰写《项目式学习课例》初稿</div>
+          <div class="meta"><span>张老师 发布</span><span>截止 2026-09-09</span><span>指派 3 人 · 已提交 2 / 3</span></div>
+        </div>
+        <div class="cnt"><b>12</b>回复</div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl"><span class="tag notice">公告</span>关于 10 月中期检查的材料清单</div>
+          <div class="meta"><span>张老师 发布</span><span>最后回复 李老师</span></div>
+        </div>
+        <div class="cnt"><b>5</b>回复</div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl"><span class="tag task">任务</span>提交学生问卷原始数据</div>
+          <div class="meta"><span>张老师 发布</span><span>截止 2026-09-14</span><span>指派 4 人 · 已提交 4 / 4</span></div>
+        </div>
+        <div class="cnt"><b>8</b>回复</div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl">课例框架讨论：是先给支架还是先放手让学生试？</div>
+          <div class="meta"><span>吴老师 发布</span><span>最后回复 张老师</span></div>
+        </div>
+        <div class="cnt"><b>17</b>回复</div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl">课堂观察量表修订建议</div>
+          <div class="meta"><span>陈老师 发布</span><span>最后回复 王老师</span></div>
+        </div>
+        <div class="cnt"><b>6</b>回复</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ========== 3. 话题详情 ========== -->
+<div class="screen" id="topic">
+<div class="wrap"><div class="cols">
+  <div>
+    <div class="crumb"><a href="#" data-go="plaza">课题组广场</a> / <a href="#" data-go="board">省级课题</a> / 任务话题</div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <span class="tag task">任务</span><span class="tag pin">置顶</span><span class="tag ok">进行中</span>
+        <button class="btn sm grow" style="margin-left:auto;flex:none">编辑</button>
+        <button class="btn sm" style="flex:none">关闭话题</button>
+      </div>
+      <h1>撰写《项目式学习课例》初稿</h1>
+      <div class="muted">张老师 发布于 2026-09-03 09:12 · 浏览 148 · 回复 12</div>
+
+      <div class="taskcard" style="margin-top:18px">
+        <div class="row"><h3 style="margin:0">任务要求</h3><span class="tag doing grow" style="margin-left:auto">进行中</span></div>
+        <p style="margin:10px 0 0;font-size:13px">
+          按新课程标准，每人设计 1 个 2 课时的项目式学习课例。需包含：驱动性问题、项目拆解、学生活动设计、
+          评价量规（rubric）、可能的学生困难与应对。请提交 Word 文档，文件名格式「姓名-课例名」。
+        </p>
+        <div class="tmeta">
+          <div><div class="lbl">截止日期</div><div class="val due over">2026-09-09（已逾期）</div></div>
+          <div><div class="lbl">指派给</div><div class="val row" style="gap:6px"><span class="av sm">吴</span><span class="av sm">李</span><span class="av sm">陈</span><span class="muted" style="font-size:12px">3 人</span></div></div>
+          <div><div class="lbl">提交情况</div><div class="val">2 / 3 已提交</div></div>
+        </div>
+        <div class="files">
+          <div class="file"><span class="ic">DOC</span><span>课例模板与评价量规示例.docx</span><span class="sz">276 KB</span><button class="btn sm">下载</button></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h2>我的提交</h2>
+      <div class="editor">吴老师：这是初稿，第 2 课时的学生活动设计还不确定，想听听大家意见……</div>
+      <div class="drop">＋ 拖拽文件到此处，或点击上传（单个 ≤ 50MB）</div>
+      <div class="files">
+        <div class="file"><span class="ic">DOC</span><span>吴-数据驱动的垃圾分类项目.docx</span><span class="sz">1.2 MB</span><button class="btn sm">删除</button></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn pri">标记完成并提交</button>
+        <button class="btn">保存草稿</button>
+        <span class="muted grow" style="text-align:right">还剩 0 天，逾期将通知组长</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>讨论（12）</h2>
+
+      <div class="post">
+        <span class="av lg">吴</span>
+        <div class="body">
+          <div class="head"><span class="who">吴老师</span><span class="tag todo">已提交</span><span class="muted">2026-09-08 20:31</span><span class="floor">3 楼</span></div>
+          <div>我先交了。第 2 课时我打算让学生自己定评价维度，但是怕课堂失控，有没有更好的做法？</div>
+          <div class="sub">张老师：可以先把维度做成半成品清单，学生只做勾选和补充 —— 既给了支架，又保留了选择权。</div>
+        </div>
+      </div>
+
+      <div class="post">
+        <span class="av lg">李</span>
+        <div class="body">
+          <div class="head"><span class="who">李老师</span><span class="tag ok">已通过</span><span class="muted">2026-09-07 15:02</span><span class="floor">2 楼</span></div>
+          <div>我的课例已按量规改完第二版，见附件。</div>
+          <div class="files"><div class="file"><span class="ic">DOC</span><span>李-校园植物识别小程序.docx</span><span class="sz">890 KB</span><button class="btn sm">下载</button></div></div>
+          <div class="sub">张老师：收到，量规部分做得很好，已确认通过。</div>
+        </div>
+      </div>
+
+      <div class="post">
+        <span class="av lg">张</span>
+        <div class="body">
+          <div class="head"><span class="who">张老师</span><span class="tag grp">组长</span><span class="muted">2026-09-03 09:12</span><span class="floor">1 楼 · 楼主</span></div>
+          <div>附件是课例模板和评价量规示例，大家照着写。有问题的直接在本帖回复。</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="editor">写下你的想法……　支持 @ 通知某人</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn pri">发表回复</button>
+        <button class="btn">＋ 附件</button>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>任务成员状态</h2>
+      <div class="side-item"><div class="row"><span class="av sm">吴</span><span>吴老师</span><span class="tag done grow" style="text-align:center;margin-left:auto">已提交</span></div></div>
+      <div class="side-item"><div class="row"><span class="av sm">李</span><span>李老师</span><span class="tag ok grow" style="text-align:center;margin-left:auto">已通过</span></div></div>
+      <div class="side-item"><div class="row"><span class="av sm">陈</span><span>陈老师</span><span class="tag todo grow" style="text-align:center;margin-left:auto">待办</span></div></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn ok sm">确认通过</button>
+        <button class="btn sm">打回</button>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:10px">组长视角：可直接查看每人附件并逐一批复。</div>
+    </div>
+    <div class="card">
+      <h2>相关文件</h2>
+      <div class="side-item"><span class="t">课例模板与评价量规示例.docx</span><span class="s">张老师 · 2026-09-03</span></div>
+      <div class="side-item"><span class="t">中期检查材料清单.xlsx</span><span class="s">张老师 · 2026-09-05</span></div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<!-- ========== 4. 我的任务 ========== -->
+<div class="screen" id="mytasks">
+<div class="wrap"><div class="cols">
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <h1 style="margin:0">我的任务</h1>
+      <div class="seg grow" style="margin-left:auto">
+        <button class="on">未完成</button><button>已提交</button><button>全部</button>
+      </div>
+    </div>
+    <div class="tlist">
+      <div class="trow">
+        <div class="main">
+          <div class="ttl">撰写《项目式学习课例》初稿<span class="tag done">已提交</span></div>
+          <div class="meta"><span>省级课题</span><span style="color:#E24B4A">截止 09-09 · 逾期 2 天</span></div>
+        </div>
+        <div class="cnt"><button class="btn sm">查看</button></div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl">提交学生问卷原始数据<span class="tag doing">进行中</span></div>
+          <div class="meta"><span>省级课题</span><span>截止 09-14 · 还剩 3 天</span></div>
+        </div>
+        <div class="cnt"><button class="btn sm pri">去提交</button></div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl">整理中期教学案例 3 篇<span class="tag todo">待办</span></div>
+          <div class="meta"><span>市级课题</span><span>截止 09-20 · 还剩 9 天</span></div>
+        </div>
+        <div class="cnt"><button class="btn sm">查看</button></div>
+      </div>
+      <div class="trow">
+        <div class="main">
+          <div class="ttl">公开课教学设计上传<span class="tag rej">已打回</span></div>
+          <div class="meta"><span>信息组日常教研</span><span>张老师：教学目标要对应课标条目，请补充</span></div>
+        </div>
+        <div class="cnt"><button class="btn sm pri">重新提交</button></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>通知中心<span class="tag rej grow" style="margin-left:auto;text-align:center">3 条未读</span></h2>
+      <div class="side-item"><span class="t">张老师 指派给你一项新任务</span><span class="s">「提交学生问卷原始数据」· 2 小时前</span></div>
+      <div class="side-item"><span class="t">张老师 打回了你的提交</span><span class="s">「公开课教学设计上传」· 昨天 10:20</span></div>
+      <div class="side-item"><span class="t">李老师 在话题中 @ 了你</span><span class="s">「课例框架讨论」· 昨天 09:05</span></div>
+      <div class="side-item"><span class="t">周老师 发布了新任务</span><span class="s">市级课题 · 3 天前</span></div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<!-- ========== 5. 发布任务 ========== -->
+<div class="screen" id="newtask">
+<div class="wrap" style="max-width:760px">
+  <div class="crumb"><a href="#" data-go="board">省级课题</a> / 发布新内容</div>
+  <div class="card">
+    <h1 style="margin-bottom:16px">发布新内容</h1>
+    <p class="tip">当前类型为「任务」：组员会收到指派通知，任务将出现在「我的任务」里并计时。</p>
+    <div class="field">
+      <label>内容类型</label>
+      <div class="seg"><button>讨论</button><button>公告</button><button class="on">任务</button></div>
+    </div>
+    <div class="field">
+      <label>标题</label>
+      <input value="撰写《项目式学习课例》初稿">
+    </div>
+    <div class="field">
+      <label>详细说明</label>
+      <textarea rows="5" style="resize:vertical">按新课程标准，每人设计 1 个 2 课时的项目式学习课例。需包含：驱动性问题、项目拆解、学生活动设计、评价量规、可能的学生困难与应对。</textarea>
+    </div>
+    <div class="field">
+      <label>指派给</label>
+      <div class="chips">
+        <span class="chip on"><span class="av sm">吴</span>吴老师</span>
+        <span class="chip on"><span class="av sm">李</span>李老师</span>
+        <span class="chip on"><span class="av sm">陈</span>陈老师</span>
+        <span class="chip"><span class="av sm">王</span>王老师</span>
+        <span class="chip"><span class="av sm">赵</span>赵老师</span>
+      </div>
+      <div class="hint">已选 3 人 · 每人独立提交与状态</div>
+    </div>
+    <div class="field">
+      <label>截止日期</label>
+      <input type="date" value="2026-09-09" style="max-width:220px">
+    </div>
+    <div class="field">
+      <label>附件</label>
+      <div class="drop">＋ 拖拽文件到此处，或点击上传（单个 ≤ 50MB，可多个）</div>
+    </div>
+    <div class="field" style="margin-bottom:0">
+      <label class="row"><input type="checkbox" checked style="width:auto;margin-right:6px">同时作为置顶话题</label>
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <button class="btn pri">发布并通知 3 位组员</button>
+      <button class="btn">存为草稿</button>
+      <button class="btn">取消</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+document.addEventListener('click',function(e){
+  var t=e.target.closest('[data-go]');
+  if(!t) return;
+  e.preventDefault();
+  var id=t.getAttribute('data-go');
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.toggle('on',s.id===id)});
+  document.querySelectorAll('.nav button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-go')===id)});
+  window.scrollTo({top:0});
+});
+document.querySelectorAll('.seg').forEach(function(seg){
+  seg.addEventListener('click',function(e){
+    if(e.target.tagName!=='BUTTON')return;
+    seg.querySelectorAll('button').forEach(function(b){b.classList.remove('on')});
+    e.target.classList.add('on');
+  });
+});
+document.querySelectorAll('.chip').forEach(function(c){
+  c.addEventListener('click',function(){c.classList.toggle('on')});
+});
+</script>
+</body>
+</html>

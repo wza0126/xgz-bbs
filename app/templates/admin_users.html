@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, csrf with context %}
+{% block title %}账号管理{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('admin.home') }}">管理后台</a> / 账号管理</div>
+
+<div class="cols">
+  <div>
+    <section class="card">
+      <div class="row bar">
+        <h1>账号（{{ rows | length }}）</h1>
+        <form method="get" class="row gap8 right">
+          <input type="search" name="q" value="{{ q }}" placeholder="搜姓名 / 账号 / 学科">
+          <button class="btn">搜索</button>
+        </form>
+      </div>
+
+      <div class="userlist">
+        {% for u in rows %}
+        <div class="userrow {{ 'off' if not u.is_active }}" id="u{{ u.id }}">
+          {{ avatar(u.display_name, 'lg') }}
+          <div class="grow">
+            <div class="uname">
+              {{ u.display_name }}
+              {% if u.role == 'admin' %}<span class="tag t-pin">管理员</span>{% endif %}
+              {% if not u.is_active %}<span class="tag t-rej">已停用</span>{% endif %}
+            </div>
+            <div class="s">
+              账号 {{ u.username }} · {{ u.subject or '未填学科' }} · 参与 {{ u.board_count }} 个课题组 ·
+              最近登录 {{ (u.last_login_at | dt) if u.last_login_at else '从未' }}
+            </div>
+          </div>
+          <details class="row-actions"{{ ' open' if open_id == u.id }}>
+            <summary class="btn xs">操作</summary>
+            <div class="action-panel">
+              <div class="uname-echo">正在编辑：<b>{{ u.display_name }}</b>（账号 {{ u.username }}）</div>
+
+              <form method="post" action="{{ url_for('admin.user_update', user_id=u.id) }}">
+                {{ csrf() }}
+                <div class="row gap8">
+                  <input type="text" name="display_name" value="{{ u.display_name }}" maxlength="20" placeholder="姓名">
+                  <input type="text" name="username" value="{{ u.username }}" maxlength="32" placeholder="登录账号">
+                  <input type="text" name="subject" value="{{ u.subject }}" maxlength="20" placeholder="学科">
+                  <select name="role" class="select">
+                    <option value="teacher" {{ 'selected' if u.role != 'admin' }}>教师</option>
+                    <option value="admin" {{ 'selected' if u.role == 'admin' }}>管理员</option>
+                  </select>
+                  <button class="btn sm pri">保存修改</button>
+                </div>
+                <div class="note">姓名、登录账号、学科、角色都能改。登录账号只允许 3–32 位字母、数字、下划线、点或横线。</div>
+              </form>
+
+              <div class="row gap8">
+                <form method="post" action="{{ url_for('admin.user_reset', user_id=u.id) }}"
+                      class="row gap8 grow">
+                  {{ csrf() }}
+                  <input type="text" name="password" placeholder="新密码（留空用 123456）">
+                  <button class="btn sm">重置密码</button>
+                </form>
+                <form method="post" action="{{ url_for('admin.user_toggle', user_id=u.id) }}"
+                      onsubmit="return confirm('确定要{{ '停用' if u.is_active else '启用' }} {{ u.display_name }} 的账号吗？')">
+                  {{ csrf() }}
+                  <button class="btn sm {{ 'danger' if u.is_active }}">{{ '停用' if u.is_active else '启用' }}</button>
+                </form>
+                <form method="post" action="{{ url_for('admin.user_delete', user_id=u.id) }}"
+                      onsubmit="return confirm('删除账号「{{ u.display_name }}（{{ u.username }}）」？\n\n如果 TA 名下已经有话题、回复或材料，系统会拒绝删除，并建议你改用「停用」。\n\n确定继续吗？')">
+                  {{ csrf() }}
+                  <button class="btn sm danger">删除</button>
+                </form>
+              </div>
+              <div class="note">「停用」= 登不进来，但发过的话题、交过的材料全都保留（推荐）；
+                「删除」= 彻底移除，只对还没发过任何内容的账号生效。</div>
+            </div>
+          </details>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>新建账号</h2>
+      <form method="post" action="{{ url_for('admin.user_new') }}">
+        {{ csrf() }}
+        <label class="fld"><span>姓名</span>
+          <input type="text" name="display_name" required maxlength="20" placeholder="张老师"></label>
+        <label class="fld"><span>账号</span>
+          <input type="text" name="username" required placeholder="zhangls 或 工号">
+          <span class="hint">3-32 位字母、数字、下划线、点、横线</span></label>
+        <label class="fld"><span>学科</span>
+          <input type="text" name="subject" maxlength="20" placeholder="信息科技"></label>
+        <label class="fld"><span>初始密码</span>
+          <input type="text" name="password" placeholder="留空则用 123456"></label>
+        <label class="check fld">
+          <input type="checkbox" name="role" value="admin"><span>设为管理员</span></label>
+        <button class="btn pri block">创建账号</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>要批量建号？</h2>
+      <p class="muted small">一次粘贴一整份名单更省事。</p>
+      <a class="btn block" href="{{ url_for('admin.import_users') }}">去批量导入</a>
+    </section>
+  </aside>
+</div>
+{% endblock %}

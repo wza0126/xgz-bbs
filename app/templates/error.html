@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="errbox">
+  <div class="errcode">{{ code }}</div>
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ detail }}</p>
+  <div class="err-actions">
+    <a class="btn pri" href="{{ url_for('boards.home') }}">回课题组广场</a>
+    <a class="btn" href="javascript:history.back()">返回上一页</a>
+  </div>
+</div>
+{% endblock %}

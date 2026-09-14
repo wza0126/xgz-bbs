@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}登录{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-head">
+      <span class="logo-mark lg">行</span>
+      <h1>{{ SITE_NAME }}</h1>
+      <p class="muted">{{ SITE_SUBTITLE }}</p>
+    </div>
+
+    <form method="post" class="login-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_url }}">
+
+      <label class="fld">
+        <span>账号</span>
+        <input type="text" name="username" autocomplete="username" autofocus required
+               placeholder="工号或姓名拼音">
+      </label>
+
+      <label class="fld">
+        <span>密码</span>
+        <input type="password" name="password" autocomplete="current-password" required
+               placeholder="初始密码请向管理员索取">
+      </label>
+
+      <button type="submit" class="btn pri block">登 录</button>
+    </form>
+
+    <p class="login-note">{{ hint }}</p>
+  </div>
+</div>
+{% endblock %}

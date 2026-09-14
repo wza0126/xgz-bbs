@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kind_tag, csrf with context %}
+{% block title %}搜索{% endblock %}
+
+{% block content %}
+<div class="narrow-wide">
+  <section class="card">
+    <h1>搜索</h1>
+    <form method="get" action="{{ url_for('search.index') }}" class="row gap8 top-gap-sm">
+      <input type="search" name="q" value="{{ q }}" class="grow" placeholder="输入关键词，回车搜索">
+      <input type="hidden" name="scope" value="{{ scope }}">
+      <button class="btn pri">搜索</button>
+    </form>
+
+    <div class="seg top-gap">
+      <a class="seg-item {{ 'on' if scope == 'topics' }}" href="{{ url_for('search.index', q=q, scope='topics') }}">话题</a>
+      <a class="seg-item {{ 'on' if scope == 'posts' }}" href="{{ url_for('search.index', q=q, scope='posts') }}">回复内容</a>
+      <a class="seg-item {{ 'on' if scope == 'files' }}" href="{{ url_for('search.index', q=q, scope='files') }}">附件文件名</a>
+    </div>
+
+    {% if not q %}
+    <div class="empty"><p class="muted">输入关键词开始搜索。只会搜到你有权限看到的课题组。</p></div>
+    {% elif total == 0 %}
+    <div class="empty"><p>没有找到和「{{ q }}」相关的内容。</p></div>
+    {% else %}
+
+      {% if scope == 'topics' %}
+      <div class="tlist top-gap">
+        {% for t in topics %}
+        <div class="trow">
+          <div class="main">
+            <div class="ttl">{{ kind_tag(t.kind) }}
+              <a href="{{ url_for('topics.detail', topic_id=t.id) }}">{{ t.title }}</a></div>
+            <div class="tmeta">
+              <span>{{ t.board_name }}</span><span>{{ t.author_name }}</span>
+              <span>{{ t.created_at | dt }}</span><span>{{ t.reply_count }} 回复</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% elif scope == 'posts' %}
+      <div class="tlist top-gap">
+        {% for p in posts %}
+        <div class="trow">
+          <div class="main">
+            <div class="ttl"><a href="{{ url_for('topics.detail', topic_id=p.topic_id) }}#p{{ p.id }}">{{ p.topic_title }}</a></div>
+            <div class="tmeta"><span>{{ p.board_name }}</span><span>{{ p.author_name }} · {{ p.floor_no }} 楼</span><span>{{ p.created_at | dt }}</span></div>
+            <div class="snippet">{{ p.body[:200] }}{{ '…' if p.body | length > 200 }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% else %}
+      <div class="files big top-gap">
+        {% for f in files %}
+        <div class="file">
+          <span class="fic">{{ file_badge(f.ext) }}</span>
+          <div class="grow">
+            <a class="fname" href="{{ url_for('files.download', attach_id=f.id) }}">{{ f.orig_name }}</a>
+            <div class="s">{{ f.board_name }} · {{ f.display_name }} · {{ f.created_at | dt }}
+              {% if f.topic_title %} ·
+              <a href="{{ url_for('topics.detail', topic_id=f.topic_id) }}">{{ f.topic_title }}</a>{% endif %}
+            </div>
+          </div>
+          <span class="fsize">{{ f.size_bytes | size }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

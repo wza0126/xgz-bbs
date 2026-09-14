@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, kind_tag, status_tag, csrf, pager with context %}
+{% block title %}{{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('boards.home') }}">课题组广场</a> / {{ board.name }}</div>
+
+<section class="card board-head">
+  <div class="row">
+    <span class="tag {{ 't-grp' if board.kind == 'project' else 't-disc' }}">{{ '课题组' if board.kind == 'project' else '综合教研组' }}</span>
+    {% if board.is_public %}<span class="tag t-ok">公开组</span>{% endif %}
+    <div class="right row gap8">
+      <a class="btn sm" href="{{ url_for('boards.files', board_id=board.id) }}">文件库</a>
+      {% if is_leader %}
+      <a class="btn sm" href="{{ url_for('boards.settings', board_id=board.id) }}">组设置</a>
+      {% endif %}
+      {% if board.is_archived %}<span class="tag t-rej">已归档</span>{% endif %}
+    </div>
+  </div>
+
+  <h1>{{ board.name }}</h1>
+  {% if board.description %}<p class="muted board-desc">{{ board.description }}</p>{% endif %}
+  <p class="muted small">组长：{{ owner_name }}
+    · 建于 {{ board.created_at | day }} · 组员 {{ stats.members }} 人</p>
+
+  <div class="metrics">
+    <div class="metric"><div class="n">{{ stats.topics }}</div><div class="l">话题</div></div>
+    <div class="metric"><div class="n">{{ stats.tasks }}</div><div class="l">任务</div></div>
+    <div class="metric"><div class="n">{{ stats.rate }}%</div><div class="l">任务完成率</div></div>
+    <div class="metric"><div class="n">{{ stats.files }}</div><div class="l">附件</div></div>
+  </div>
+
+  <div class="row bar top-gap">
+    <form class="row gap8" method="get" action="{{ url_for('boards.detail', board_id=board.id) }}">
+      <div class="seg">
+        <a class="seg-item {{ 'on' if not kind }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='') }}">全部</a>
+        <a class="seg-item {{ 'on' if kind == 'task' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='task') }}">任务</a>
+        <a class="seg-item {{ 'on' if kind == 'discussion' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='discussion') }}">讨论</a>
+        <a class="seg-item {{ 'on' if kind == 'notice' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='notice') }}">公告</a>
+      </div>
+      <input type="hidden" name="kind" value="{{ kind or '' }}">
+      <select name="sort" onchange="this.form.submit()" class="select">
+        <option value="reply" {{ 'selected' if sort == 'reply' }}>最新回复</option>
+        <option value="new" {{ 'selected' if sort == 'new' }}>发布时间</option>
+        <option value="hot" {{ 'selected' if sort == 'hot' }}>最多回复</option>
+      </select>
+    </form>
+    <a class="btn pri right" href="{{ url_for('topics.create', board_id=board.id) }}">＋ 发布</a>
+  </div>
+</section>
+
+<div class="cols">
+  <div>
+    <section class="card">
+      {% if topics %}
+      <div class="tlist">
+        {% for t in topics %}
+        <div class="trow">
+          <div class="main">
+            <div class="ttl">
+              {% if t.is_pinned %}<span class="tag t-pin">置顶</span>{% endif %}
+              {% if t.is_featured %}<span class="tag t-featured">精</span>{% endif %}
+              {{ kind_tag(t.kind) }}
+              <a href="{{ url_for('topics.detail', topic_id=t.id) }}">{{ t.title }}</a>
+              {% if t.status == 'closed' %}<span class="tag t-todo">已关闭</span>{% endif %}
+            </div>
+            <div class="tmeta">
+              <span>{{ t.author_name }} 发布</span>
+              {% if t.kind == 'task' %}
+                <span>{% if t.due_date %}截止 {{ t.due_date }} · {% endif %}已提交 {{ t.assign_done }} / {{ t.assign_total }}</span>
+              {% endif %}
+              {% if t.last_reply_at %}<span>最后回复 {{ t.last_reply_name or '' }} · {{ rel_time(t.last_reply_at) }}</span>{% endif %}
+            </div>
+          </div>
+          <div class="cnt"><b>{{ t.reply_count }}</b>回复</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">
+        <p>这里还没有内容。</p>
+        <p class="muted">点「＋ 发布」发第一个话题，或者把任务派下去。</p>
+      </div>
+      {% endif %}
+      {{ pager(page, pages, url_for('boards.detail', board_id=board.id, kind=kind or '', sort=sort)) }}
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>组成员（{{ members|length }}）</h2>
+      {% for m in members %}
+      <div class="side-item row gap8">
+        {{ avatar(m.display_name, 'sm') }}
+        <div class="grow">
+          <div class="t">{{ m.display_name }}{% if m.role == 'leader' %} <span class="tag t-pin">组长</span>{% endif %}</div>
+          <div class="s">{{ m.subject or '未填学科' }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+
+    {% if is_leader %}
+    <section class="card">
+      <h2>材料导出</h2>
+      <p class="muted small">把本课题的话题、讨论、任务和全部附件打成一个 zip，结题时直接用。</p>
+      <a class="btn pri block" href="{{ url_for('boards.export', board_id=board.id, mode='all') }}">打包下载全部材料</a>
+      <a class="btn block top-gap-sm" href="{{ url_for('boards.export', board_id=board.id, mode='files') }}">只打包全部附件</a>
+    </section>
+
+    {% if scoreboard %}
+    <section class="card">
+      <h2>任务得分榜</h2>
+      {% for s in scoreboard %}
+      <div class="side-item row gap8">
+        {{ avatar(s.display_name, 'sm') }}
+        <div class="grow">
+          <div class="t">{{ s.display_name }}</div>
+          <div class="s">已通过 {{ s.confirmed }} 项 · 待审 {{ s.pending }} 项</div>
+        </div>
+        <span class="score">{{ s.total_score }} 分</span>
+      </div>
+      {% endfor %}
+      <p class="muted small top-gap-sm">得分来自组长审核通过时填写的分数。</p>
+    </section>
+    {% endif %}
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

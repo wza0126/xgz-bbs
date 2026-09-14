@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, csrf, pager with context %}
+{% block title %}通知中心{% endblock %}
+
+{% block content %}
+<div class="narrow-wide">
+  <section class="card">
+    <div class="row bar">
+      <h1>通知中心</h1>
+      <div class="seg right">
+        <a class="seg-item {{ 'on' if scope == 'all' }}" href="{{ url_for('notify.center', scope='all') }}">全部</a>
+        <a class="seg-item {{ 'on' if scope == 'unread' }}" href="{{ url_for('notify.center', scope='unread') }}">未读</a>
+      </div>
+      {% if unread %}
+      <form method="post" action="{{ url_for('notify.read') }}" class="inline-form">
+        {{ csrf() }}
+        <button class="btn sm">全部标为已读</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if items %}
+    <div class="notifs">
+      {% for n in items %}
+      <a class="notif {{ 'unread' if not n.is_read }}" href="{{ url_for('notify.open_item', nid=n.id) }}">
+        {% if n.actor_name %}{{ avatar(n.actor_name, 'sm') }}{% else %}<span class="av sm">系</span>{% endif %}
+        <div class="grow">
+          <div class="ntext">{{ n.summary }}</div>
+          <div class="s">{{ n.created_at | dt }} · {{ rel_time(n.created_at) }}</div>
+        </div>
+        {% if not n.is_read %}<span class="dot"></span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {{ pager(page, pages, url_for('notify.center', scope=scope)) }}
+    {% else %}
+    <div class="empty"><p>{{ '没有未读通知。' if scope == 'unread' else '还没有收到通知。' }}</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

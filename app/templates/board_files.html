@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pager with context %}
+{% block title %}{{ board.name }} · 文件库{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('boards.home') }}">课题组广场</a> /
+  <a href="{{ url_for('boards.detail', board_id=board.id) }}">{{ board.name }}</a> / 文件库</div>
+
+<section class="card">
+  <div class="row">
+    <h1>文件库<span class="muted small"> 共 {{ total }} 个附件</span></h1>
+    {% if is_leader %}
+    <a class="btn pri right" href="{{ url_for('boards.export', board_id=board.id, mode='files') }}">打包下载全部附件</a>
+    {% endif %}
+  </div>
+
+  {% if items %}
+  <div class="files big">
+    {% for a in items %}
+    <div class="file">
+      <span class="fic">{{ file_badge(a.ext) }}</span>
+      <div class="grow">
+        <a class="fname" href="{{ url_for('files.download', attach_id=a.id) }}">{{ a.orig_name }}</a>
+        <div class="s">
+          {{ a.display_name }} 上传 · {{ a.created_at | dt }} · 下载 {{ a.download_count }} 次
+          {% if a.topic_title %}
+          · 来自 <a href="{{ url_for('topics.detail', topic_id=a.topic_id) }}">{{ a.topic_title }}</a>
+          {% endif %}
+        </div>
+      </div>
+      <span class="fsize">{{ a.size_bytes | size }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {{ pager(page, pages, url_for('boards.files', board_id=board.id)) }}
+  {% else %}
+  <div class="empty"><p>还没有上传过附件。</p></div>
+  {% endif %}
+</section>
+{% endblock %}

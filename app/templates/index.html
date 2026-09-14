@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, kind_tag, status_tag, csrf with context %}
+{% block title %}课题组广场{% endblock %}
+
+{% block content %}
+<div class="cols">
+  <div>
+    <div class="row bar">
+      <div class="seg">
+        <a class="seg-item {{ 'on' if scope == 'all' }}" href="{{ url_for('boards.home', scope='all') }}">全部课题组</a>
+        <a class="seg-item {{ 'on' if scope == 'mine' }}" href="{{ url_for('boards.home', scope='mine') }}">我参与的</a>
+        <a class="seg-item {{ 'on' if scope == 'public' }}" href="{{ url_for('boards.home', scope='public') }}">公开组</a>
+      </div>
+      <a class="btn pri right" href="{{ url_for('boards.create') }}">＋ 创建课题组</a>
+    </div>
+
+    {% if boards %}
+      {% for b in boards %}
+      <a class="bcard" href="{{ url_for('boards.detail', board_id=b.id) }}">
+        <div class="row bcard-top">
+          <span class="tag {{ 't-grp' if b.kind == 'project' else 't-disc' }}">{{ '课题组' if b.kind == 'project' else '综合教研组' }}</span>
+          {% if b.is_public %}<span class="tag t-ok">公开组</span>{% endif %}
+          {% if b.my_role == 'leader' %}<span class="tag t-pin">我是组长</span>{% endif %}
+          <span class="muted right small">{{ rel_time(b.last_active) if b.last_active else '还没有内容' }}</span>
+        </div>
+        <div class="bname">{{ b.name }}</div>
+        {% if b.description %}<div class="bdesc">{{ b.description }}</div>{% endif %}
+        <div class="row bmeta">
+          <span class="muted">组长：{{ b.owner_name }}</span>
+          <span class="muted">组员 {{ b.member_count }} 人</span>
+          <span class="muted right">话题 {{ b.topic_count }} · 任务 {{ b.task_count }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="card empty">
+        <p>这个分类下还没有课题组。</p>
+        <p class="muted">组长可以点右上角「＋ 创建课题组」建一个，比如「省级课题：×××研究」。</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>我的待办 <a class="mini right" href="{{ url_for('tasks.my_tasks') }}">全部</a></h2>
+      {% if my_tasks %}
+        {% for t in my_tasks %}
+        <div class="side-item">
+          <a class="t" href="{{ url_for('topics.detail', topic_id=t.topic_id) }}#task">{{ t.task_title }}</a>
+          <div class="s">
+            <span>{{ t.board_name }}</span>
+            {% set st = due_state(t.due_date) %}
+            {% if t.due_date %}<span class="{{ 'over' if st[1] else '' }}">· {{ st[0] }}</span>{% endif %}
+            {{ status_tag(t.status) }}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">暂时没有待办任务。</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>最新回复</h2>
+      {% if replies %}
+        {% for r in replies %}
+        <div class="side-item">
+          <a class="t" href="{{ url_for('topics.detail', topic_id=r.topic_id) }}#p{{ r.id }}">{{ r.topic_title }}</a>
+          <div class="s">{{ r.author_name }} · {{ r.board_name }} · {{ rel_time(r.created_at) }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">还没有回复。</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>最新话题</h2>
+      {% if latest %}
+        {% for t in latest %}
+        <div class="side-item">
+          <a class="t" href="{{ url_for('topics.detail', topic_id=t.id) }}">{{ t.title }}</a>
+          <div class="s">{{ kind_tag(t.kind) }} {{ t.author_name }} · {{ rel_time(t.created_at) }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">还没有话题。</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

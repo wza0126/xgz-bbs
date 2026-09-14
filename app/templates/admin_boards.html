@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}课题组总览{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('admin.home') }}">管理后台</a> / 课题组总览</div>
+
+<section class="card">
+  <h1>课题组总览（{{ rows | length }}）</h1>
+  <div class="tlist">
+    {% for b in rows %}
+    <div class="trow">
+      <div class="main">
+        <div class="ttl">
+          <a href="{{ url_for('boards.detail', board_id=b.id) }}">{{ b.name }}</a>
+          <span class="tag {{ 't-grp' if b.kind == 'project' else 't-disc' }}">{{ '课题组' if b.kind == 'project' else '综合组' }}</span>
+          {% if b.is_public %}<span class="tag t-ok">公开</span>{% endif %}
+          {% if b.is_archived %}<span class="tag t-rej">已归档</span>{% endif %}
+        </div>
+        <div class="tmeta">
+          <span>组长 {{ b.owner_name }}</span>
+          <span>组员 {{ b.member_count }}</span>
+          <span>话题 {{ b.topic_count }}</span>
+          <span>任务 {{ b.task_count }}</span>
+          <span>附件 {{ b.file_count }}</span>
+          <span>建于 {{ b.created_at | day }}</span>
+        </div>
+      </div>
+      <div class="cnt row gap8">
+        <details class="row-actions">
+          <summary class="btn xs">管理</summary>
+          <div class="action-panel">
+            <form method="post" action="{{ url_for('admin.board_owner', board_id=b.id) }}">
+              {{ csrf() }}
+              <div class="row gap8">
+                <select name="user_id" class="select">
+                  {% for u in users %}
+                  <option value="{{ u.id }}" {{ 'selected' if u.id == b.owner_id }}>{{ u.display_name }}（{{ u.username }}）</option>
+                  {% endfor %}
+                </select>
+                <button class="btn sm pri">转让组长</button>
+              </div>
+            </form>
+            <form method="post" action="{{ url_for('admin.board_archive', board_id=b.id) }}"
+                  class="top-gap-sm">
+              {{ csrf() }}
+              <button class="btn sm {{ 'danger' if not b.is_archived }}">
+                {{ '恢复课题组' if b.is_archived else '归档（结题后隐藏）' }}</button>
+            </form>
+          </div>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

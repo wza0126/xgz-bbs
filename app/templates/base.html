@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}{{ SITE_NAME }}{% endblock %} · {{ SITE_NAME }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="logo" href="{{ url_for('boards.home') }}">
+    <span class="logo-mark">行</span><span class="logo-text">行知教研吧</span>
+  </a>
+  {% if current_user %}
+  <nav class="nav">
+    <a href="{{ url_for('boards.home') }}" class="{{ 'on' if request.endpoint == 'boards.home' }}">课题组广场</a>
+    <a href="{{ url_for('tasks.my_tasks') }}" class="{{ 'on' if request.endpoint == 'tasks.my_tasks' }}">我的任务</a>
+    {% if is_admin %}
+    <a href="{{ url_for('admin.home') }}" class="{{ 'on' if request.endpoint and request.endpoint.startswith('admin.') }}">管理后台</a>
+    {% endif %}
+  </nav>
+
+  <form class="search" action="{{ url_for('search.index') }}" method="get" role="search">
+    <input type="search" name="q" value="{{ q if q is defined else '' }}" placeholder="搜索话题、回复、附件">
+  </form>
+
+  <div class="topright">
+    <a class="bell" href="{{ url_for('notify.center') }}" title="通知中心">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+      </svg>
+      <span class="badge{% if not unread %} hide{% endif %}" id="notifBadge">{{ unread }}</span>
+    </a>
+    <div class="me">
+      <a class="me-link" href="{{ url_for('auth.me') }}">
+        <span class="av" style="{{ avatar_style(current_user['display_name']) }}">{{ avatar_char(current_user['display_name']) }}</span>
+        <span class="me-name">{{ current_user['display_name'] }}</span>
+      </a>
+      <form method="post" action="{{ url_for('auth.logout') }}" class="inline-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit" class="linkish">退出</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</header>
+
+<main class="wrap">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes">
+      {% for cat, msg in messages %}
+      <div class="flash flash-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="foot">
+  <span>{{ SITE_NAME }} · {{ SITE_SUBTITLE }}</span>
+  <span>数据与附件保存在服务器本机，定期备份 data/ 目录</span>
+</footer>
+
+<script>
+window.BBS = {
+  csrf: {{ csrf_token() | tojson }},
+  maxUpload: {{ MAX_UPLOAD_MB }},
+  urls: { upload: {{ url_for('files.upload') | tojson }},
+          notifCount: {{ url_for('notify.count') | tojson }} }
+};
+</script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

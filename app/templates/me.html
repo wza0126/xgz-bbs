@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, csrf with context %}
+{% block title %}个人设置{% endblock %}
+
+{% block content %}
+<div class="cols">
+  <div>
+    <section class="card">
+      <div class="row gap12">
+        {{ avatar(current_user['display_name'], 'xl') }}
+        <div>
+          <h1>{{ current_user['display_name'] }}</h1>
+          <p class="muted small">账号 {{ current_user['username'] }} ·
+            {{ '系统管理员' if current_user['role'] == 'admin' else '教师' }} ·
+            {{ current_user['subject'] or '未填学科' }}</p>
+        </div>
+      </div>
+      <div class="metrics top-gap">
+        <div class="metric"><div class="n">{{ stats.topics }}</div><div class="l">发起话题</div></div>
+        <div class="metric"><div class="n">{{ stats.posts }}</div><div class="l">发表回复</div></div>
+        <div class="metric"><div class="n">{{ stats.files }}</div><div class="l">上传附件</div></div>
+        <div class="metric"><div class="n">{{ stats.score }}</div><div class="l">累计得分</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>基本资料</h2>
+      <form method="post">
+        {{ csrf() }}
+        <input type="hidden" name="action" value="profile">
+        <div class="row gap12">
+          <label class="fld grow">
+            <span>姓名</span>
+            <input type="text" name="display_name" value="{{ current_user['display_name'] }}" maxlength="20" required>
+          </label>
+          <label class="fld grow">
+            <span>学科</span>
+            <input type="text" name="subject" value="{{ current_user['subject'] }}" maxlength="20"
+                   placeholder="信息科技 / 数学 / 语文……">
+          </label>
+        </div>
+        <button class="btn pri">保存资料</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>修改密码</h2>
+      <form method="post">
+        {{ csrf() }}
+        <input type="hidden" name="action" value="password">
+        <div class="row gap12">
+          <label class="fld grow">
+            <span>原密码</span>
+            <input type="password" name="old_password" autocomplete="current-password" required>
+          </label>
+          <label class="fld grow">
+            <span>新密码</span>
+            <input type="password" name="new_password" autocomplete="new-password" minlength="6" required>
+          </label>
+          <label class="fld grow">
+            <span>再输一次</span>
+            <input type="password" name="new_password2" autocomplete="new-password" minlength="6" required>
+          </label>
+        </div>
+        <button class="btn pri">修改密码</button>
+      </form>
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>我参与的课题组（{{ my_boards | length }}）</h2>
+      {% if my_boards %}
+        {% for b in my_boards %}
+        <div class="side-item">
+          <a class="t" href="{{ url_for('boards.detail', board_id=b.id) }}">{{ b.name }}</a>
+          <div class="s">
+            {% if b.role == 'leader' %}<span class="tag t-pin">组长</span>{% else %}<span class="tag t-todo">组员</span>{% endif %}
+            {% if b.is_public %}<span class="tag t-ok">公开</span>{% endif %}
+            {{ b.joined_at | day }} 加入
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">还没有加入任何课题组。可以自己在广场上建一个。</p>
+      {% endif %}
+    </section>
+    {% if is_admin %}
+    <section class="card">
+      <h2>管理员入口</h2>
+      <a class="btn block" href="{{ url_for('admin.users') }}">账号管理</a>
+      <a class="btn block top-gap-sm" href="{{ url_for('admin.import_users') }}">批量导入账号</a>
+      <a class="btn block top-gap-sm" href="{{ url_for('admin.boards') }}">课题组总览</a>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

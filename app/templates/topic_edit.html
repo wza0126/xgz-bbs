@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, upload_area, file_rows with context %}
+{% block title %}编辑 · {{ topic.title }}{% endblock %}
+
+{% block content %}
+<div class="crumb">
+  <a href="{{ url_for('boards.home') }}">课题组广场</a> /
+  <a href="{{ url_for('boards.detail', board_id=board.id) }}">{{ board.name }}</a> /
+  <a href="{{ url_for('topics.detail', topic_id=topic.id) }}">{{ topic.title }}</a> / 编辑
+</div>
+
+<div class="narrow">
+  <form method="post" class="card">
+    {{ csrf() }}
+    <h1>编辑{{ TOPIC_KIND.get(topic.kind, topic.kind) }}</h1>
+
+    <label class="fld">
+      <span>标题</span>
+      <input type="text" name="title" value="{{ topic.title }}" required maxlength="120">
+    </label>
+
+    <label class="fld">
+      <span>正文</span>
+      <textarea name="body" rows="7" class="ta">{{ topic.body }}</textarea>
+    </label>
+
+    {% if task %}
+    <div class="row gap12">
+      <label class="fld grow">
+        <span>截止日期</span>
+        <input type="date" name="due_date" value="{{ task.due_date or '' }}">
+      </label>
+      <label class="fld grow">
+        <span>满分</span>
+        <input type="number" name="points" min="0" max="1000" value="{{ task.points or 0 }}">
+      </label>
+    </div>
+    <p class="muted small">要调整指派的人，回到话题页点「调整指派」。</p>
+    {% endif %}
+
+    <div class="fld">
+      <span>附件</span>
+      {{ file_rows(topic_atts, can_delete=True, me_id=current_user.id, leader=true) }}
+      {{ upload_area(board.id, 'draft', 0) }}
+    </div>
+
+    <div class="row top-gap">
+      <button type="submit" class="btn pri">保存</button>
+      <a class="btn" href="{{ url_for('topics.detail', topic_id=topic.id) }}">返回话题</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_tag, csrf with context %}
+{% block title %}我的任务{% endblock %}
+
+{% block content %}
+<div class="cols">
+  <div>
+    <section class="card">
+      <div class="row bar">
+        <h1>我的任务</h1>
+        <div class="seg right">
+          <a class="seg-item {{ 'on' if scope == 'open' }}" href="{{ url_for('tasks.my_tasks', scope='open') }}">未完成</a>
+          <a class="seg-item {{ 'on' if scope == 'done' }}" href="{{ url_for('tasks.my_tasks', scope='done') }}">已提交</a>
+          <a class="seg-item {{ 'on' if scope == 'all' }}" href="{{ url_for('tasks.my_tasks', scope='all') }}">全部</a>
+        </div>
+      </div>
+
+      <div class="metrics top-gap-sm">
+        <div class="metric"><div class="n">{{ summary.total }}</div><div class="l">当前列表</div></div>
+        <div class="metric"><div class="n {{ 'danger-text' if summary.overdue }}">{{ summary.overdue }}</div><div class="l">已逾期</div></div>
+        <div class="metric"><div class="n">{{ summary.done }}</div><div class="l">已提交</div></div>
+        <div class="metric"><div class="n">{{ summary.score }}</div><div class="l">累计得分</div></div>
+      </div>
+
+      {% if items %}
+      <div class="tlist top-gap">
+        {% for it in items %}
+        {% set st = due_state(it.due_date) %}
+        <div class="trow">
+          <div class="main">
+            <div class="ttl">
+              <a href="{{ url_for('topics.detail', topic_id=it.topic_id) }}#task">{{ it.task_title }}</a>
+              {{ status_tag(it.status) }}
+              {% if it.score is not none %}<span class="tag t-ok">{{ it.score }} 分</span>{% endif %}
+            </div>
+            <div class="tmeta">
+              <span>{{ it.board_name }}</span>
+              <span>{{ it.creator_name }} 指派</span>
+              {% if it.due_date %}
+              <span class="{{ 'over' if st[1] and it.status in ('todo','doing','rejected') }}">截止 {{ it.due_date }} · {{ st[0] }}</span>
+              {% endif %}
+              {% if it.points %}<span>满分 {{ it.points }}</span>{% endif %}
+              {% if it.review_note %}<span>评语：{{ it.review_note }}</span>{% endif %}
+            </div>
+          </div>
+          <div class="cnt">
+            <a class="btn sm {{ 'pri' if it.status in ('todo','doing','rejected') }}"
+               href="{{ url_for('topics.detail', topic_id=it.topic_id) }}#task">
+              {{ '去提交' if it.status in ('todo','doing') else ('重新提交' if it.status == 'rejected' else '查看') }}
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">
+        <p>{{ '太好了，没有待办任务。' if scope == 'open' else '这里还是空的。' }}</p>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>怎么看任务状态</h2>
+      <p class="muted small">
+        <b>待办</b> 组长刚派给你，还没开始 →
+        <b>进行中</b> 你标了开始做 →
+        <b>已提交</b> 你交了，等组长看 →
+        <b>已通过</b> 组长确认，可能带分数 →
+        <b>已打回</b> 需要你按评语改一版再交。
+      </p>
+    </section>
+    <section class="card">
+      <h2>提醒</h2>
+      <p class="muted small">逾期任务会在课题组和广场上标红，组长看得到。真来不及就先在话题里回一句说明情况。</p>
+    </section>
+  </aside>
+</div>
+{% endblock %}

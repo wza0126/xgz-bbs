@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar with context %}
+{% block title %}管理后台{% endblock %}
+
+{% block content %}
+<div class="crumb">管理后台</div>
+
+<section class="card">
+  <h1>运行概览</h1>
+  <div class="metrics">
+    <div class="metric"><div class="n">{{ stats.users }}</div><div class="l">在用账号</div></div>
+    <div class="metric"><div class="n">{{ stats.boards }}</div><div class="l">课题组</div></div>
+    <div class="metric"><div class="n">{{ stats.topics }}</div><div class="l">话题</div></div>
+    <div class="metric"><div class="n">{{ stats.posts }}</div><div class="l">回复</div></div>
+    <div class="metric"><div class="n">{{ stats.tasks }}</div><div class="l">任务</div></div>
+    <div class="metric"><div class="n">{{ stats.files }}</div><div class="l">附件</div></div>
+    <div class="metric"><div class="n">{{ stats.bytes | size }}</div><div class="l">附件占用</div></div>
+  </div>
+  <div class="row gap8 top-gap">
+    <a class="btn pri" href="{{ url_for('admin.users') }}">账号管理</a>
+    <a class="btn" href="{{ url_for('admin.import_users') }}">批量导入</a>
+    <a class="btn" href="{{ url_for('admin.boards') }}">课题组总览</a>
+  </div>
+</section>
+
+<div class="cols">
+  <section class="card">
+    <h2>附件占用排行</h2>
+    {% if biggest %}
+    <div class="tlist">
+      {% for b in biggest %}
+      <div class="trow">
+        <div class="main">
+          <div class="ttl"><a href="{{ url_for('boards.detail', board_id=b.id) }}">{{ b.name }}</a></div>
+          <div class="tmeta"><span>{{ b.n }} 个附件</span></div>
+        </div>
+        <div class="cnt"><b>{{ b.bytes | size }}</b></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="muted">还没有附件。</p>{% endif %}
+  </section>
+
+  <aside class="side">
+    <section class="card">
+      <h2>最近登录</h2>
+      {% for u in last_logins %}
+      <div class="side-item row gap8">
+        {{ avatar(u.display_name, 'sm') }}
+        <div class="grow">
+          <div class="t">{{ u.display_name }}</div>
+          <div class="s">{{ u.username }} · {{ u.subject or '—' }}</div>
+        </div>
+        <span class="s">{{ (u.last_login_at | dt) if u.last_login_at else '从未登录' }}</span>
+      </div>
+      {% endfor %}
+    </section>
+  </aside>
+</div>
+{% endblock %}

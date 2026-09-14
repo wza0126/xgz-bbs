@@ -1,0 +1,5 @@
+# 统一换行：脚本必须 LF（群晖 NAS 部署要求），bat 用 CRLF
+* text=auto
+*.sh text eol=lf
+*.bat text eol=crlf
+*.py text=auto

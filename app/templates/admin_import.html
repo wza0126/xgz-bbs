@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}批量导入账号{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('admin.home') }}">管理后台</a> / 批量导入账号</div>
+
+<div class="cols">
+  <div>
+    <section class="card">
+      <h1>批量导入账号</h1>
+      <p class="muted">一行一个老师，用逗号隔开。最少写「姓名,账号」，后面两列可省。</p>
+      <pre class="code">张老师,zhangls,123456,信息科技
+李老师,lils,123456,信息科技
+王老师,wangls,,数学</pre>
+      <p class="muted small">密码留空则使用下面的默认密码。已存在的账号会自动跳过，不会覆盖。</p>
+
+      <form method="post" class="top-gap">
+        {{ csrf() }}
+        <label class="fld">
+          <span>名单</span>
+          <textarea name="text" rows="12" class="ta mono" required
+                    placeholder="张老师,zhangls,123456,信息科技"></textarea>
+        </label>
+        <label class="fld">
+          <span>默认密码（可改）</span>
+          <input type="text" name="default_password" value="{{ default_password }}" maxlength="32">
+          <span class="hint">发给老师时记得提醒他们登录后自行修改。</span>
+        </label>
+        <button class="btn pri">开始导入</button>
+      </form>
+    </section>
+  </div>
+
+  <aside class="side">
+    {% if report %}
+    <section class="card">
+      <h2>导入结果</h2>
+      <p class="muted small">成功 {{ report.created | length }} 个，跳过 {{ report.skipped | length }} 行。</p>
+      {% if report.created %}
+      <div class="files big">
+        {% for name, uname, pw in report.created %}
+        <div class="file">
+          <span class="fic ok">新</span>
+          <div class="grow">
+            <div class="fname">{{ name }}</div>
+            <div class="s">{{ uname }} · 初始密码 {{ pw }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if report.skipped %}
+      <h2 class="top-gap">被跳过的行</h2>
+      <div class="files big">
+        {% for line, why in report.skipped %}
+        <div class="file">
+          <span class="fic warn">!</span>
+          <div class="grow">
+            <div class="fname">{{ line }}</div>
+            <div class="s">{{ why }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="card">
+      <h2>小提示</h2>
+      <p class="muted small">账号建议用姓名拼音，老师们好记。姓名会在帖子里显示，要写常见的称呼，比如「张老师」。</p>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

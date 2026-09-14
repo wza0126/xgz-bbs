@@ -1,0 +1,62 @@
+{# 常用小零件 #}
+{% macro csrf() -%}
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+{%- endmacro %}
+
+{% macro avatar(name, cls='') -%}
+<span class="av {{ cls }}" style="{{ avatar_style(name) }}">{{ avatar_char(name) }}</span>
+{%- endmacro %}
+
+{% macro kind_tag(kind) -%}
+{%- if kind == 'task' -%}<span class="tag t-task">任务</span>
+{%- elif kind == 'notice' -%}<span class="tag t-notice">公告</span>
+{%- else -%}<span class="tag t-disc">讨论</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro status_tag(status) -%}
+{%- set cls = {'todo':'t-todo','doing':'t-doing','done':'t-done','confirmed':'t-ok','rejected':'t-rej'} -%}
+<span class="tag {{ cls.get(status, 't-todo') }}">{{ TASK_STATUS.get(status, status) }}</span>
+{%- endmacro %}
+
+{% macro file_rows(atts, can_delete=False, me_id=None, leader=False) -%}
+{% if atts %}
+<div class="files">
+  {% for a in atts %}
+  {% set del_ok = can_delete and (a.owner_id == me_id or leader) %}
+  <div class="file" id="att-{{ a.id }}">
+    <span class="fic">{{ file_badge(a.ext) }}</span>
+    <a class="fname" href="{{ url_for('files.download', attach_id=a.id) }}">{{ a.orig_name }}</a>
+    <span class="fsize">{{ a.size_bytes | size }}</span>
+    {% if a.ext in config.INLINE_EXT %}
+    <a class="fmini" href="{{ url_for('files.inline', attach_id=a.id) }}" target="_blank" rel="noopener">预览</a>
+    {% endif %}
+    {% if del_ok %}
+    <button type="button" class="fmini danger" data-del-att="{{ a.id }}">删除</button>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro pager(page, pages, base_url) -%}
+{% if pages > 1 %}
+{% set sep = '&' if '?' in base_url else '?' %}
+<nav class="pager">
+  {% if page > 1 %}<a class="pg" href="{{ base_url }}{{ sep }}page={{ page - 1 }}">上一页</a>{% endif %}
+  <span class="pginfo">第 {{ page }} / {{ pages }} 页</span>
+  {% if page < pages %}<a class="pg" href="{{ base_url }}{{ sep }}page={{ page + 1 }}">下一页</a>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{% macro upload_area(board_id, attachable_type='draft', attachable_id=0, hint='') -%}
+<div class="up" data-uploader data-board="{{ board_id }}"
+     data-atype="{{ attachable_type }}" data-aid="{{ attachable_id }}">
+  <div class="drop">
+    <span>把文件拖到这里，或<label class="pick">点击选择<input type="file" multiple hidden class="up-input"></label></span>
+    <span class="drop-hint">{{ hint or ('单个文件不超过 ' ~ MAX_UPLOAD_MB ~ ' MB，可多选') }}</span>
+  </div>
+  <div class="up-list"></div>
+</div>
+{%- endmacro %}

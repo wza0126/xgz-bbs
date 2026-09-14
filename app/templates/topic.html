@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, kind_tag, status_tag, file_rows, csrf, upload_area with context %}
+{% block title %}{{ topic.title }}{% endblock %}
+
+{% block content %}
+<div class="crumb">
+  <a href="{{ url_for('boards.home') }}">课题组广场</a> /
+  <a href="{{ url_for('boards.detail', board_id=board.id) }}">{{ board.name }}</a> /
+  {{ TOPIC_KIND.get(topic.kind, topic.kind) }}
+</div>
+
+<div class="cols">
+  <div>
+    {# ---------------- 主帖 ---------------- #}
+    <section class="card">
+      <div class="row gap8">
+        {% if topic.is_pinned %}<span class="tag t-pin">置顶</span>{% endif %}
+        {% if topic.is_featured %}<span class="tag t-featured">精华</span>{% endif %}
+        {{ kind_tag(topic.kind) }}
+        {% if topic.status == 'closed' %}<span class="tag t-todo">已关闭</span>{% endif %}
+
+        <div class="right row gap8">
+          {% if topic.author_id == current_user.id or is_leader %}
+          <a class="btn xs" href="{{ url_for('topics.edit', topic_id=topic.id) }}">编辑</a>
+          {% endif %}
+          {% if is_leader %}
+          <form method="post" action="{{ url_for('topics.pin', topic_id=topic.id) }}" class="inline-form">
+            {{ csrf() }}<button class="btn xs">{{ '取消置顶' if topic.is_pinned else '置顶' }}</button>
+          </form>
+          <form method="post" action="{{ url_for('topics.feature', topic_id=topic.id) }}" class="inline-form">
+            {{ csrf() }}<button class="btn xs">{{ '取消精华' if topic.is_featured else '加精' }}</button>
+          </form>
+          <form method="post" action="{{ url_for('topics.close', topic_id=topic.id) }}" class="inline-form">
+            {{ csrf() }}<button class="btn xs">{{ '重新开放' if topic.status == 'closed' else '关闭' }}</button>
+          </form>
+          <form method="post" action="{{ url_for('topics.delete', topic_id=topic.id) }}" class="inline-form"
+                onsubmit="return confirm('删除后话题及其讨论、附件都无法恢复，确定吗？')">
+            {{ csrf() }}<button class="btn xs danger">删除</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <h1>{{ topic.title }}</h1>
+      <p class="muted small">
+        {{ topic.author_name }}{% if topic.author_subject %}（{{ topic.author_subject }}）{% endif %}
+        发布于 {{ topic.created_at | dt }} · 浏览 {{ topic.view_count }} · 回复 {{ topic.reply_count }}
+        {% if topic.updated_at != topic.created_at %}· 最后编辑 {{ topic.updated_at | dt }}{% endif %}
+      </p>
+
+      {% if topic.body %}
+      <article class="body-text">{{ topic.body }}</article>
+      {% endif %}
+      {% if topic_atts %}
+      {{ file_rows(topic_atts, can_delete=True, me_id=current_user.id, leader=is_leader) }}
+      {% endif %}
+    </section>
+
+    {# ---------------- 任务卡 ---------------- #}
+    {% if task %}
+    <section class="card taskcard" id="task">
+      <div class="row gap8">
+        <h2 class="grow">任务说明</h2>
+        {% if task.due_date %}
+          {% set st = due_state(task.due_date) %}
+          <span class="tag {{ 't-rej' if st[1] else 't-doing' }}">{{ st[0] }}</span>
+        {% endif %}
+        {% if task.status == 'closed' %}<span class="tag t-todo">已关闭</span>{% endif %}
+      </div>
+      {% if task.detail %}<div class="body-text">{{ task.detail }}</div>{% endif %}
+
+      <div class="tgrid">
+        <div>
+          <div class="lbl">截止日期</div>
+          <div class="val {{ 'over' if task.due_date and due_state(task.due_date)[1] }}">
+            {{ task.due_date or '未设' }}
+          </div>
+        </div>
+        <div>
+          <div class="lbl">满分</div>
+          <div class="val">{{ task.points if task.points else '不计分' }}</div>
+        </div>
+        <div>
+          <div class="lbl">提交情况</div>
+          <div class="val">{{ assignees | selectattr('status', 'in', ['done', 'confirmed']) | list | length }}
+            / {{ assignees | length }}</div>
+        </div>
+        <div>
+          <div class="lbl">发布人</div>
+          <div class="val">{{ task.creator_name }}</div>
+        </div>
+      </div>
+
+      {% if is_leader %}
+      <details class="assign-box">
+        <summary>调整指派（当前 {{ assignees|length }} 人）</summary>
+        <form method="post" action="{{ url_for('tasks.assign', topic_id=topic.id) }}">
+          {{ csrf() }}
+          <div class="chips top-gap-sm">
+            {% set chosen = assignees | map(attribute='user_id') | list %}
+            {% for m in members %}
+            <label class="chip {{ 'on' if m.id in chosen }}">
+              <input type="checkbox" name="assignee_ids" value="{{ m.id }}"
+                     class="sr-only" {{ 'checked' if m.id in chosen }}>
+              {{ avatar(m.display_name, 'sm') }} {{ m.display_name }}
+            </label>
+            {% endfor %}
+          </div>
+          <p class="muted small top-gap-sm">只有已加入课题组的老师能出现在这里。取消勾选即移除指派。</p>
+          <button class="btn sm pri top-gap-sm">保存指派</button>
+        </form>
+      </details>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {# ---------------- 我的提交 ---------------- #}
+    {% if my_assignee %}
+    <section class="card">
+      <div class="row gap8">
+        <h2 class="grow">我的提交</h2>
+        {{ status_tag(my_assignee.status) }}
+        {% if my_assignee.score is not none %}<span class="tag t-ok">{{ my_assignee.score }} 分</span>{% endif %}
+      </div>
+
+      {% if my_assignee.status == 'confirmed' %}
+        <p class="muted">组长已确认通过
+          {% if my_assignee.reviewed_at %}（{{ my_assignee.reviewed_at | dt }}）{% endif %}
+          {% if my_assignee.review_note %}，评语：{{ my_assignee.review_note }}{% endif %}。</p>
+      {% else %}
+        {% set sub_body = (posts | selectattr('id', 'equalto', my_assignee.submission_post_id)
+                           | map(attribute='body') | first) if my_assignee.submission_post_id else '' %}
+        {% if my_assignee.status == 'rejected' and my_assignee.review_note %}
+        <div class="alert danger">被打回：{{ my_assignee.review_note }}</div>
+        {% endif %}
+        {% if my_assignee.status == 'todo' %}
+        <form method="post" action="{{ url_for('tasks.start', topic_id=topic.id) }}" class="inline-form">
+          {{ csrf() }}<button class="btn sm">标记为进行中</button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('tasks.submit', topic_id=topic.id) }}">
+          {{ csrf() }}
+          <textarea name="body" rows="4" class="ta"
+                    placeholder="写点说明：做了什么、遇到什么问题、需要谁配合……">{{ sub_body }}</textarea>
+          {{ upload_area(board.id, 'draft', 0) }}
+          <div class="row top-gap">
+            <button class="btn pri" type="submit">{{ '重新提交' if my_assignee.status == 'rejected' else '标记完成并提交' }}</button>
+            <span class="muted small right">
+              {% if task.due_date %}{% set st = due_state(task.due_date) %}
+                截止 {{ task.due_date }}（{{ st[0] }}）{% endif %}
+            </span>
+          </div>
+        </form>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {# ---------------- 讨论 ---------------- #}
+    <section class="card">
+      <h2>讨论（{{ posts | length }}）</h2>
+      {% if top_level %}
+        {% for p in top_level %}
+          {% set is_sub = p.id in is_submission %}
+          <div class="post" id="p{{ p.id }}">
+            {{ avatar(p.display_name, 'lg') }}
+            <div class="pbody">
+              <div class="phead">
+                <span class="who">{{ p.display_name }}</span>
+                {% if is_sub %}<span class="tag t-done">任务提交</span>{% endif %}
+                {% if p.author_id == topic.author_id %}<span class="tag t-disc">楼主</span>{% endif %}
+                <span class="muted">{{ p.created_at | dt }}</span>
+                {% if p.updated_at != p.created_at %}<span class="muted">· 已编辑</span>{% endif %}
+                <span class="floor">{{ p.floor_no }} 楼</span>
+              </div>
+              {% if p.body %}<div class="body-text">{{ p.body }}</div>{% endif %}
+              {{ file_rows(post_atts.get(p.id, []), can_delete=True, me_id=current_user.id, leader=is_leader) }}
+              <div class="pacts">
+                {% if topic.status != 'closed' %}
+                <button type="button" class="linkish" data-reply-to="{{ p.id }}"
+                        data-reply-name="{{ p.display_name }}">回复</button>
+                {% endif %}
+                {% if p.author_id == current_user.id or is_leader %}
+                <form method="post" action="{{ url_for('topics.delete_post', post_id=p.id) }}" class="inline-form"
+                      onsubmit="return confirm('删除这条回复？')">
+                  {{ csrf() }}<button class="linkish danger">删除</button>
+                </form>
+                {% endif %}
+              </div>
+
+              {% for c in children.get(p.id, []) %}
+              <div class="subpost" id="p{{ c.id }}">
+                {{ avatar(c.display_name, 'sm') }}
+                <div class="pbody">
+                  <div class="phead">
+                    <span class="who">{{ c.display_name }}</span>
+                    <span class="muted">回复 {{ p.floor_no }} 楼 · {{ c.created_at | dt }}</span>
+                    <span class="floor">#{{ c.floor_no }}</span>
+                  </div>
+                  {% if c.body %}<div class="body-text">{{ c.body }}</div>{% endif %}
+                  {{ file_rows(post_atts.get(c.id, []), can_delete=True, me_id=current_user.id, leader=is_leader) }}
+                  {% if c.author_id == current_user.id or is_leader %}
+                  <div class="pacts">
+                    <form method="post" action="{{ url_for('topics.delete_post', post_id=c.id) }}" class="inline-form"
+                          onsubmit="return confirm('删除这条回复？')">
+                      {{ csrf() }}<button class="linkish danger">删除</button>
+                    </form>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">还没有人回复。</p>
+      {% endif %}
+
+      {% if topic.status == 'closed' %}
+      <div class="alert">话题已关闭，不能再回复。</div>
+      {% else %}
+      <form method="post" action="{{ url_for('topics.reply', topic_id=topic.id) }}" class="replyform" id="replyForm">
+        {{ csrf() }}
+        <input type="hidden" name="parent_id" id="parentId" value="">
+        <div class="reply-to hint-bar hide" id="replyToBar">
+          正在回复 <b id="replyToName"></b>
+          <button type="button" class="linkish" id="cancelReply">取消</button>
+        </div>
+        <textarea name="body" rows="4" class="ta" placeholder="写下你的想法……用 @姓名 可以通知某人"></textarea>
+        {{ upload_area(board.id, 'draft', 0) }}
+        <div class="row top-gap">
+          <button class="btn pri" type="submit">发表回复</button>
+        </div>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+
+  {# ---------------- 侧栏 ---------------- #}
+  <aside class="side">
+    {% if task %}
+    <section class="card">
+      <h2>任务成员</h2>
+      {% for a in assignees %}
+      <div class="side-item">
+        <div class="row gap8">
+          {{ avatar(a.display_name, 'sm') }}
+          <div class="grow">
+            <div class="t">{{ a.display_name }}
+              {% if a.score is not none %}<span class="score">{{ a.score }} 分</span>{% endif %}
+            </div>
+            <div class="s">{{ (a.submitted_at | dt) if a.submitted_at else '未提交' }}</div>
+          </div>
+          {{ status_tag(a.status) }}
+        </div>
+
+        {% if is_leader and a.status in ('done', 'rejected') %}
+        <form method="post" action="{{ url_for('tasks.review', topic_id=topic.id) }}" class="review top-gap-sm">
+          {{ csrf() }}
+          <input type="hidden" name="assignee_id" value="{{ a.id }}">
+          <div class="row gap8">
+            <input type="number" name="score" class="score-in" min="0" max="1000" step="1"
+                   placeholder="{{ task.points or '分' }}">
+            <button class="btn xs ok" name="action" value="confirm">通过</button>
+            <button class="btn xs danger" name="action" value="reject">打回</button>
+          </div>
+          <input type="text" name="review_note" class="note-in" placeholder="评语；打回时必填原因">
+        </form>
+        {% elif a.review_note %}
+        <div class="s top-gap-sm">评语：{{ a.review_note }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+      <p class="muted small top-gap-sm">打分可留空，留空表示只通过不计分。</p>
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>本页文件</h2>
+      {% set allfiles = topic_atts %}
+      {% if allfiles or post_atts %}
+      <div class="files">
+        {% for a in topic_atts %}
+        <div class="file">
+          <span class="fic">{{ file_badge(a.ext) }}</span>
+          <a class="fname" href="{{ url_for('files.download', attach_id=a.id) }}">{{ a.orig_name }}</a>
+          <span class="fsize">{{ a.size_bytes | size }}</span>
+        </div>
+        {% endfor %}
+        {% for pid, lst in post_atts.items() %}
+          {% for a in lst %}
+          <div class="file">
+            <span class="fic">{{ file_badge(a.ext) }}</span>
+            <a class="fname" href="{{ url_for('files.download', attach_id=a.id) }}">{{ a.orig_name }}</a>
+            <span class="fsize">{{ a.size_bytes | size }}</span>
+          </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">这一页还没有附件。</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>《{{ board.name }}》</h2>
+      <p class="muted small">{{ board.description or '暂无简介' }}</p>
+      <a class="btn block" href="{{ url_for('boards.detail', board_id=board.id) }}">回到课题组</a>
+    </section>
+  </aside>
+</div>
+{% endblock %}

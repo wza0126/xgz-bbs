@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}创建课题组{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('boards.home') }}">课题组广场</a> / 创建课题组</div>
+<div class="narrow">
+  <div class="card">
+    <h1>创建课题组</h1>
+    <p class="muted">建好之后你就是这个组的组长，可以拉人、发任务、打包材料。</p>
+    <form method="post">
+      {{ csrf() }}
+      <label class="fld">
+        <span>课题组名称</span>
+        <input type="text" name="name" required maxlength="80"
+               placeholder="例：核心素养导向的高中信息技术项目式学习实践研究">
+      </label>
+      <label class="fld">
+        <span>简介（可选）</span>
+        <textarea name="description" rows="3" maxlength="500"
+                  placeholder="课题级别、研究内容、大概的节奏安排"></textarea>
+      </label>
+      <label class="fld">
+        <span>类型</span>
+        <select name="kind" class="select">
+          <option value="project">课题组（课题研究）</option>
+          <option value="general">综合教研组（日常教研）</option>
+        </select>
+      </label>
+      <label class="check fld">
+        <input type="checkbox" name="is_public" value="1">
+        <span>设为公开组 —— 全校老师都能浏览，但只有组员能发帖</span>
+      </label>
+      <div class="row top-gap">
+        <button type="submit" class="btn pri">创建</button>
+        <a class="btn" href="{{ url_for('boards.home') }}">取消</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

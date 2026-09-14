@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, csrf with context %}
+{% block title %}{{ board.name }} · 组设置{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('boards.home') }}">课题组广场</a> /
+  <a href="{{ url_for('boards.detail', board_id=board.id) }}">{{ board.name }}</a> / 组设置</div>
+
+<div class="cols">
+  <div>
+    <section class="card">
+      <h2>基本设置</h2>
+      <form method="post">
+        {{ csrf() }}
+        <label class="fld">
+          <span>名称</span>
+          <input type="text" name="name" value="{{ board.name }}" required maxlength="80">
+        </label>
+        <label class="fld">
+          <span>简介</span>
+          <textarea name="description" rows="3" maxlength="500">{{ board.description }}</textarea>
+        </label>
+        <label class="fld">
+          <span>类型</span>
+          <select name="kind" class="select">
+            <option value="project" {{ 'selected' if board.kind == 'project' }}>课题组</option>
+            <option value="general" {{ 'selected' if board.kind == 'general' }}>综合教研组</option>
+          </select>
+        </label>
+        <label class="check fld">
+          <input type="checkbox" name="is_public" value="1" {{ 'checked' if board.is_public }}>
+          <span>公开组 —— 全校老师可浏览</span>
+        </label>
+        <label class="check fld">
+          <input type="checkbox" name="is_archived" value="1" {{ 'checked' if board.is_archived }}>
+          <span>归档 —— 不在广场显示，内容保留（结题后可以用）</span>
+        </label>
+        <button type="submit" class="btn pri">保存</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>材料导出</h2>
+      <p class="muted small">把本课题全部话题、讨论、任务和附件打成一个 zip。</p>
+      <div class="row gap8">
+        <a class="btn pri" href="{{ url_for('boards.export', board_id=board.id, mode='all') }}">打包下载全部材料</a>
+        <a class="btn" href="{{ url_for('boards.export', board_id=board.id, mode='files') }}">只打包全部附件</a>
+      </div>
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>组员（{{ members|length }}）</h2>
+      {% for m in members %}
+      <div class="side-item">
+        <div class="row gap8">
+          {{ avatar(m.display_name, 'sm') }}
+          <div class="grow">
+            <div class="t">{{ m.display_name }}
+              {% if m.role == 'leader' %}<span class="tag t-pin">组长</span>{% endif %}
+            </div>
+            <div class="s">{{ m.username }} · {{ m.subject or '未填学科' }}</div>
+          </div>
+        </div>
+        <div class="row gap8 top-gap-sm">
+          <form method="post" action="{{ url_for('boards.member_role', board_id=board.id, user_id=m.id) }}">
+            {{ csrf() }}
+            <input type="hidden" name="role" value="{{ 'member' if m.role == 'leader' else 'leader' }}">
+            <button class="btn xs">{{ '取消组长' if m.role == 'leader' else '设为组长' }}</button>
+          </form>
+          {% if m.id != board.owner_id %}
+          <form method="post" action="{{ url_for('boards.member_remove', board_id=board.id, user_id=m.id) }}"
+                onsubmit="return confirm('确定把 {{ m.display_name }} 移出课题组？')">
+            {{ csrf() }}
+            <button class="btn xs danger">移出</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+
+    <section class="card">
+      <h2>加入组员</h2>
+      <form method="post" action="{{ url_for('boards.member_add', board_id=board.id) }}">
+        {{ csrf() }}
+        <label class="fld">
+          <span>姓名或账号</span>
+          <input type="text" name="who" list="cand" placeholder="输入姓名，如：李老师" required>
+          <datalist id="cand">
+            {% for c in candidates %}<option value="{{ c.display_name }}">{{ c.username }}</option>{% endfor %}
+          </datalist>
+          <span class="hint">姓名要完全一致。没找到就先在管理后台建号。</span>
+        </label>
+        <button type="submit" class="btn pri block">加入</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}
