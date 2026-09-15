@@ -75,7 +75,7 @@ def board_scoreboard(board_id):
 def topic_list(board_id, kind=None, sort="reply", page=1, per_page=20, keyword=None):
     where = ["t.board_id = ?"]
     args = [board_id]
-    if kind in ("discussion", "notice", "task"):
+    if kind in ("discussion", "notice", "task", "training", "achievement"):
         where.append("t.kind = ?")
         args.append(kind)
     if keyword:

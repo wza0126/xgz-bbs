@@ -192,6 +192,8 @@ pages = [
     (f"/b/{B1}?kind=task", 200, "课题组 1·任务筛选"),
     (f"/b/{B1}?sort=new", 200, "课题组 1·按时间"),
     (f"/b/{B1}?kind=discussion&sort=hot", 200, "课题组 1·讨论最热"),
+    (f"/b/{B1}?kind=training", 200, "课题组 1·培训筛选"),
+    (f"/b/{B1}?kind=achievement", 200, "课题组 1·成果筛选"),
     (f"/b/{B1}/files", 200, "课题组 1·文件库"),
     (f"/b/{B1}/settings", 200, "课题组 1·组设置"),
     (f"/b/{B1}/new", 200, "发帖页"),

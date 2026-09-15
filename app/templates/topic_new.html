@@ -19,6 +19,12 @@
         <label class="seg-item {{ 'on' if kind == 'discussion' }}">
           <input type="radio" name="kind" value="discussion" {{ 'checked' if kind == 'discussion' }} hidden>讨论
         </label>
+        <label class="seg-item {{ 'on' if kind == 'training' }}">
+          <input type="radio" name="kind" value="training" {{ 'checked' if kind == 'training' }} hidden>培训
+        </label>
+        <label class="seg-item {{ 'on' if kind == 'achievement' }}">
+          <input type="radio" name="kind" value="achievement" {{ 'checked' if kind == 'achievement' }} hidden>成果
+        </label>
         {% if is_leader %}
         <label class="seg-item {{ 'on' if kind == 'notice' }}">
           <input type="radio" name="kind" value="notice" {{ 'checked' if kind == 'notice' }} hidden>公告
@@ -29,8 +35,8 @@
         {% endif %}
       </div>
       <span class="hint">
-        {% if is_leader %}任务会出现在组员的「我的任务」里并开始计时；公告会通知全组。
-        {% else %}组员可以发起讨论；任务与公告由组长发布。{% endif %}
+        {% if is_leader %}任务会出现在组员的「我的任务」里并开始计时；公告会通知全组。培训、成果用于沉淀学习记录与课题成果。
+        {% else %}组员可以发起讨论、培训、成果；任务与公告由组长发布。{% endif %}
       </span>
     </div>
 

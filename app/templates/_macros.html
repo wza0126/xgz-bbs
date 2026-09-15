@@ -10,6 +10,8 @@
 {% macro kind_tag(kind) -%}
 {%- if kind == 'task' -%}<span class="tag t-task">任务</span>
 {%- elif kind == 'notice' -%}<span class="tag t-notice">公告</span>
+{%- elif kind == 'training' -%}<span class="tag t-training">培训</span>
+{%- elif kind == 'achievement' -%}<span class="tag t-achievement">成果</span>
 {%- else -%}<span class="tag t-disc">讨论</span>{%- endif -%}
 {%- endmacro %}
 

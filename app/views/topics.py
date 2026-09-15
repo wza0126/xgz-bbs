@@ -24,7 +24,7 @@ def create(board_id):
 
     if request.method == "POST":
         kind = request.form.get("kind", "discussion")
-        if kind not in ("discussion", "notice", "task"):
+        if kind not in ("discussion", "notice", "task", "training", "achievement"):
             kind = "discussion"
         if kind in ("notice", "task") and not is_leader:
             abort(403)

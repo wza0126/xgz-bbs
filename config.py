@@ -50,7 +50,8 @@ TASK_STATUS = {
     "rejected": "已打回",
 }
 
-TOPIC_KIND = {"discussion": "讨论", "notice": "公告", "task": "任务"}
+TOPIC_KIND = {"discussion": "讨论", "notice": "公告", "task": "任务",
+              "training": "培训", "achievement": "成果"}
 
 
 def load_secret_key() -> str:

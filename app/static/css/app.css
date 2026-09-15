@@ -129,6 +129,8 @@ p{margin:0 0 8px}
 .t-task{background:var(--brand-l);color:var(--brand-d)}
 .t-notice{background:var(--warn-l);color:var(--warn-d)}
 .t-disc{background:var(--soft);color:var(--muted)}
+.t-training{background:var(--ok-l);color:var(--ok-d)}
+.t-achievement{background:var(--purple-l);color:#3C3489}
 .t-grp{background:var(--purple-l);color:#3C3489}
 .t-pin{background:var(--danger-l);color:var(--danger-d)}
 .t-featured{background:var(--warn-l);color:var(--warn-d)}
