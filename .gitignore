@@ -6,6 +6,8 @@ __pycache__/
 *.pyc
 *.pyo
 _probe.txt
+_livetest.html
+_verify_*.py
 
 # 编辑器
 .vscode/

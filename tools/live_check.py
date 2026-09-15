@@ -191,6 +191,29 @@ if victim:
     _, h = req(f"/admin/users/{victim['id']}/delete", {"_csrf": csrf(h)})
     check("名下还有" in flash_of(h), "拒绝删除有内容的账号（商瑜，回复 5 条）", flash_of(h))
 
+# ---------- 5.5 话题类型：培训 / 成果 已上线（只读） ----------
+_, home = req("/")
+bids = sorted({int(x) for x in re.findall(r"/b/(\d+)", home)})
+bid = None
+for b in bids:
+    _, bp = req(f"/b/{b}")
+    if "kind=training" in bp:
+        bid = b
+        break
+check(bid is not None, "找到含「培训」筛选的课题组页")
+if bid:
+    _, bp = req(f"/b/{bid}")
+    check("培训" in bp and "成果" in bp, f"课题组 #{bid} 标签栏有「培训 / 成果」")
+    check("kind=training" in bp, "有 kind=training 筛选链接")
+    check("kind=achievement" in bp, "有 kind=achievement 筛选链接")
+    _, t1 = req(f"/b/{bid}?kind=training")
+    check(len(t1) > 200, "kind=training 筛选页可打开")
+    _, t2 = req(f"/b/{bid}?kind=achievement")
+    check(len(t2) > 200, "kind=achievement 筛选页可打开")
+    _, np = req(f"/b/{bid}/new")
+    check('value="training"' in np, "发帖页有「培训」选项")
+    check('value="achievement"' in np, "发帖页有「成果」选项")
+
 # ---------- 6. 无副作用确认 ----------
 _, page2 = req("/admin/users")
 AFTER = len(users_of(page2))
