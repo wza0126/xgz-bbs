@@ -47,9 +47,9 @@
     </label>
 
     <label class="fld">
-      <span id="bodyLabel">正文</span>
+      <span id="bodyLabel">{{ '任务说明' if kind == 'task' else '正文' }}</span>
       <textarea name="body" rows="7" class="ta" id="bodyInput"
-                placeholder="把背景、要求、参考资料交代清楚"></textarea>
+                placeholder="{{ '写清任务要求、交付物与验收标准（会展示在任务卡里）' if kind == 'task' else '把背景、要求、参考资料交代清楚' }}"></textarea>
     </label>
 
     {% if is_leader %}
@@ -108,6 +108,15 @@
       var isTask = el.querySelector('input').value === 'task';
       var tf = document.getElementById('taskFields');
       if (tf) { tf.classList.toggle('hide', !isTask); }
+      // 任务的那段文字就是「任务说明」，在表单里也叫这个名字，省得老师以为要写两遍
+      var lb = document.getElementById('bodyLabel');
+      var bi = document.getElementById('bodyInput');
+      if (lb) { lb.textContent = isTask ? '任务说明' : '正文'; }
+      if (bi) {
+        bi.placeholder = isTask
+          ? '写清任务要求、交付物与验收标准（会展示在任务卡里）'
+          : '把背景、要求、参考资料交代清楚';
+      }
     });
   });
   document.querySelectorAll('.chips .chip').forEach(function (c) {

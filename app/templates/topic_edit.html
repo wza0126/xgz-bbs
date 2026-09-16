@@ -20,7 +20,7 @@
     </label>
 
     <label class="fld">
-      <span>正文</span>
+      <span>{{ '任务说明' if task else '正文' }}</span>
       <textarea name="body" rows="7" class="ta">{{ topic.body }}</textarea>
     </label>
 

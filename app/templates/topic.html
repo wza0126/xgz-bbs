@@ -48,7 +48,8 @@
         {% if topic.updated_at != topic.created_at %}· 最后编辑 {{ topic.updated_at | dt }}{% endif %}
       </p>
 
-      {% if topic.body %}
+      {# 任务是「任务即话题」：正文与任务说明同源，任务卡里已经展示过一次，这里不再重复贴 #}
+      {% if topic.body and not (task and task.detail == topic.body) %}
       <article class="body-text">{{ topic.body }}</article>
       {% endif %}
       {% if topic_atts %}

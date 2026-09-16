@@ -214,6 +214,30 @@ if bid:
     check('value="training"' in np, "发帖页有「培训」选项")
     check('value="achievement"' in np, "发帖页有「成果」选项")
 
+# ---------- 5.6 任务说明不与正文重复（只读） ----------
+# 「任务即话题」：正文与任务说明同源，同源时页面上只应出现一次（展示在任务卡里）。
+task_topic = None
+for b in bids:
+    _, tp = req(f"/b/{b}?kind=task")
+    found = [int(x) for x in re.findall(r"/t/(\d+)", tp)]
+    if found:
+        task_topic = found[0]
+        break
+check(task_topic is not None, "找到一个任务话题（用于校验任务说明）")
+if task_topic:
+    _, tp = req(f"/t/{task_topic}")
+    m = re.search(r'<section class="card taskcard" id="task">(.*?)</section>', tp, re.S)
+    d = re.search(r'<div class="body-text">(.*?)</div>', m.group(1), re.S) if m else None
+    if not d:
+        LINES.append(f"… 任务 #{task_topic} 没有任务说明，跳过重复校验")
+    else:
+        _txt = d.group(1).strip()
+        _n = tp.count(_txt)
+        check(_n == 1, f"任务 #{task_topic} 的任务说明只显示 1 次", f"实际 {_n} 次")
+        _main = re.search(r'<section class="card">(.*?)</section>', tp, re.S)
+        check(not (_main and _txt in _main.group(0)),
+              "主帖卡不再重复任务说明（改前后这里会重复一遍）")
+
 # ---------- 6. 无副作用确认 ----------
 _, page2 = req("/admin/users")
 AFTER = len(users_of(page2))

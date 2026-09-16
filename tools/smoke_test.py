@@ -250,6 +250,53 @@ tok = csrf_from(html)
 post(f"/t/{T4}/assign", {"_csrf": tok, "assignee_ids": [str(u) for u in FX["ASSIGN_USERS"]]},
      200, "调整任务指派")
 
+# ---------- 6.5 任务说明不与正文重复（「任务即话题」：同源时只显示一次） ----------
+
+def task_detail_of(html):
+    """取任务卡里那段说明文字；取不到返回 None。"""
+    m = re.search(r'<section class="card taskcard" id="task">(.*?)</section>', html, re.S)
+    if not m:
+        return None
+    d = re.search(r'<div class="body-text">(.*?)</div>', m.group(1), re.S)
+    return d.group(1).strip() if d else None
+
+
+MARK = "SMOKE-DEDUP-7788"
+MADE_TITLE = "冒烟测试任务（可删）"
+code, html = get(f"/b/{B1}/new", 200)
+post(f"/b/{B1}/new", {"_csrf": csrf_from(html), "kind": "task", "title": MADE_TITLE,
+                      "body": f"第一行要求 {MARK}\n第二行要求：交一份 Word。",
+                      "points": "0", "due_date": "2030-01-01",
+                      "assignee_ids": [str(FX["ASSIGN_USERS"][0])]}, 200, "发布任务话题")
+
+_con2 = _con()
+_made = _con2.execute("SELECT id FROM topics WHERE title = ? ORDER BY id DESC LIMIT 1",
+                      (MADE_TITLE,)).fetchone()
+_con2.close()
+if _made is None:
+    bad.append(("找不到刚发布的任务话题", 0, MADE_TITLE))
+else:
+    _, _th = get(f"/t/{_made['id']}", 200)
+    _txt = task_detail_of(_th)
+    if not _txt:
+        bad.append(("任务卡里没有渲染出任务说明", 0, ""))
+    elif _th.count(_txt) == 1:
+        ok.append(("任务说明只显示 1 次（不与正文重复）", 200))
+    else:
+        bad.append((f"任务说明重复显示 {_th.count(_txt)} 次", 0, _txt[:80]))
+    _main = re.search(r'<section class="card">(.*?)</section>', _th, re.S)
+    if _main and MARK in _main.group(0):
+        bad.append(("主帖卡里仍重复贴了任务说明", 0, ""))
+    else:
+        ok.append(("主帖卡不再重复任务说明", 200))
+
+# 已有演示任务（正文 ≠ 任务说明）时，两段信息都应保留，不能丢
+_, _t1h = get(f"/t/{T1}", 200)
+if task_detail_of(_t1h) and task_detail_of(_t1h) in _t1h:
+    ok.append(("正文与任务说明不同时，任务说明仍正常展示", 200))
+else:
+    bad.append(("演示任务的任务说明丢了", 0, ""))
+
 # ---------- 7. 组长导出课题材料 ----------
 for mode in ("all", "files"):
     url = f"{BASE}/b/{B1}/export?mode={mode}"
