@@ -50,34 +50,77 @@ TASK_STATUS = {
     "rejected": "已打回",
 }
 
-# 话题类型。键即 topics.kind 存库值，值即界面显示的中文名。
-# 新增类型时只需改这里一处（外加 app.css 里加一条 .t-<kind> 配色），
-# 标签栏、发帖类型选择、kind 白名单都从这里派生。
-TOPIC_KIND = {
-    "discussion": "讨论",
-    "plan": "方案",
-    "record": "记录",
-    "work": "作品",
-    "achievement": "成果",
-    "training": "培训",
-    "resource": "资源",
-    "notice": "公告",
-    "task": "任务",
+# ============================================================
+#  话题类型（kind）
+# ------------------------------------------------------------
+#  清单存在数据库表 topic_kinds 里，管理员在「管理后台 → 类型标签」自助增删，
+#  不用再改代码、不用重新部署。下面这几份只在两种场合用：
+#    ① 首次建库时灌种子（app/kinds.py: seed_defaults）
+#    ② 表读不到时兜底，保证页面照样能渲染
+#  读取入口统一走 app/kinds.py，别在别处再写死类型列表。
+# ============================================================
+
+# 标签配色调色板。数据库里只存这个键，CSS 里对应 .t-c-<键>，
+# 所以后台新增类型不用动 CSS。顺序即后台颜色选择的顺序。
+PALETTE = {
+    "brand": "蓝",
+    "ok": "绿",
+    "warn": "琥珀",
+    "danger": "红",
+    "purple": "紫",
+    "teal": "青",
+    "rose": "玫红",
+    "orange": "橙",
+    "slate": "石板灰",
+    "soft": "浅灰",
 }
 
-# 课题组页标签栏的排列顺序（「全部」由模板补在最前）
-TOPIC_KIND_ORDER = ["task", "discussion", "notice", "training", "achievement",
-                    "plan", "record", "work", "resource"]
+# 种子类型：code = 入库值 / 界面网址标识，label = 中文名，
+# color = 调色板键，leader_only = 仅组长可发，pinnable = 可置顶
+DEFAULT_TOPIC_KINDS = [
+    {"code": "task", "label": "任务", "color": "brand",
+     "leader_only": 1, "pinnable": 1},
+    {"code": "discussion", "label": "讨论", "color": "soft",
+     "leader_only": 0, "pinnable": 0},
+    {"code": "notice", "label": "公告", "color": "warn",
+     "leader_only": 1, "pinnable": 1},
+    {"code": "training", "label": "培训", "color": "ok",
+     "leader_only": 0, "pinnable": 0},
+    {"code": "achievement", "label": "成果", "color": "purple",
+     "leader_only": 0, "pinnable": 0},
+    {"code": "plan", "label": "方案", "color": "teal",
+     "leader_only": 0, "pinnable": 0},
+    {"code": "record", "label": "记录", "color": "rose",
+     "leader_only": 0, "pinnable": 0},
+    {"code": "work", "label": "作品", "color": "orange",
+     "leader_only": 0, "pinnable": 0},
+    {"code": "resource", "label": "资源", "color": "slate",
+     "leader_only": 0, "pinnable": 0},
+]
 
-# 仅组长可发布的类型；其余类型组员也能发
-LEADER_ONLY_KINDS = ("notice", "task")
+# 代码里有专门流程、必须存在的类型：
+#   discussion —— 类型非法时的兜底值（所以还不许停用）
+#   task       —— 会建 tasks 行、进「我的任务」、带指派与审核
+#   notice     —— 发布时通知全组
+# 这三个不许删除、不许改 code。停用是允许的（可逆、不破坏历史数据），
+# 但 discussion 例外 —— 它一停，发布页就没有默认类型了。
+BUILTIN_KIND_CODES = ("discussion", "notice", "task")
+UNDISABLABLE_KIND_CODES = ("discussion",)
 
-# 可置顶的类型
-PINNABLE_KINDS = ("notice", "task")
+# 类型非法 / 表单没带值时回落到哪个类型
+FALLBACK_KIND = "discussion"
 
-# 组员可发布的类型名（按标签栏顺序）——发帖页提示文案直接用，别再手写一遍
-TOPIC_KIND_FREE_LABELS = [TOPIC_KIND[k] for k in TOPIC_KIND_ORDER
-                          if k not in LEADER_ONLY_KINDS]
+KIND_LABEL_MAX = 8          # 类型名最长几个字
+KIND_CODE_RE = r"[a-z][a-z0-9_]{1,23}"   # 自定义标识的格式
+
+# ---------- 兜底清单（数据库读不到时用，正常路径不查这里）----------
+TOPIC_KIND = {k["code"]: k["label"] for k in DEFAULT_TOPIC_KINDS}
+TOPIC_KIND_ORDER = [k["code"] for k in DEFAULT_TOPIC_KINDS]
+TOPIC_KIND_COLOR = {k["code"]: k["color"] for k in DEFAULT_TOPIC_KINDS}
+LEADER_ONLY_KINDS = tuple(k["code"] for k in DEFAULT_TOPIC_KINDS if k["leader_only"])
+PINNABLE_KINDS = tuple(k["code"] for k in DEFAULT_TOPIC_KINDS if k["pinnable"])
+TOPIC_KIND_FREE_LABELS = [k["label"] for k in DEFAULT_TOPIC_KINDS
+                          if not k["leader_only"]]
 
 
 def load_secret_key() -> str:

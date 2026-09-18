@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}类型标签{% endblock %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('admin.home') }}">管理后台</a> / 类型标签</div>
+
+<div class="cols">
+  <div>
+    <section class="card">
+      <div class="row bar">
+        <h1>话题标签（{{ rows | length }}）</h1>
+        <span class="muted small right">这里的先后顺序，就是课题组页标签栏的顺序</span>
+      </div>
+
+      <div class="userlist">
+        {% for k in rows %}
+        <div class="userrow {{ 'off' if not k.is_active }}" id="k{{ k.id }}">
+          <span class="kindex">{{ loop.index }}</span>
+          <div class="grow">
+            <div class="uname">
+              <span class="tag t-c-{{ k.color }}">{{ k.label }}</span>
+              {% if k.is_builtin %}<span class="tag t-todo">内置</span>{% endif %}
+              {% if k.leader_only %}<span class="tag t-pin">仅组长可发</span>{% endif %}
+              {% if not k.is_active %}<span class="tag t-rej">已停用</span>{% endif %}
+            </div>
+            <div class="s">
+              话题 {{ usage[k.code] }} 个 · 网址标识 <span class="kcode">{{ k.code }}</span>
+              {%- if k.pinnable %} · 发布时可置顶{% endif %}
+            </div>
+          </div>
+
+          <form method="post" action="{{ url_for('admin.kind_move', kid=k.id) }}" class="inline-form">
+            {{ csrf() }}
+            <button class="btn xs" name="dir" value="up" title="上移"
+                    {{ 'disabled' if loop.first }}>↑</button>
+            <button class="btn xs" name="dir" value="down" title="下移"
+                    {{ 'disabled' if loop.last }}>↓</button>
+          </form>
+
+          <details class="row-actions"{{ ' open' if open_id == k.id }}>
+            <summary class="btn xs">编辑</summary>
+            <div class="action-panel narrow">
+              <div class="uname-echo">正在编辑：<b>{{ k.label }}</b>
+                （标识 <span class="kcode">{{ k.code }}</span>，建后不可改）</div>
+
+              <form method="post" action="{{ url_for('admin.kind_update', kid=k.id) }}">
+                {{ csrf() }}
+                <div class="row gap8">
+                  <input type="text" name="label" value="{{ k.label }}"
+                         maxlength="{{ KIND_LABEL_MAX }}" placeholder="名称">
+                  <button class="btn sm pri">保存</button>
+                </div>
+
+                <div class="fld top-gap-sm">
+                  <span>标签颜色</span>
+                  <div class="swatches">
+                    {% for key, cname in KIND_PALETTE.items() %}
+                    <label class="swatch" title="{{ cname }}">
+                      <input type="radio" name="color" value="{{ key }}" class="sr-only"
+                             {{ 'checked' if key == k.color }}>
+                      <span class="tag t-c-{{ key }}">{{ cname }}</span>
+                    </label>
+                    {% endfor %}
+                  </div>
+                </div>
+
+                <label class="check fld">
+                  <input type="checkbox" name="leader_only" {{ 'checked' if k.leader_only }}>
+                  <span>仅组长可发布</span>
+                </label>
+              </form>
+
+              <div class="row gap8">
+                <form method="post" action="{{ url_for('admin.kind_toggle', kid=k.id) }}"
+                      onsubmit="return confirm('{{ '停用' if k.is_active else '重新启用' }}「{{ k.label }}」？')">
+                  {{ csrf() }}
+                  <button class="btn sm {{ 'danger' if k.is_active }}"
+                          {{ 'disabled' if k.is_active and k.code in UNDISABLABLE_KINDS }}>
+                    {{ '停用' if k.is_active else '重新启用' }}
+                  </button>
+                </form>
+                <form method="post" action="{{ url_for('admin.kind_delete', kid=k.id) }}"
+                      onsubmit="return confirm('删除标签「{{ k.label }}」？\n\n如果有话题正在用它，系统会拒绝删除并建议你改用「停用」。')">
+                  {{ csrf() }}
+                  <button class="btn sm danger">删除</button>
+                </form>
+              </div>
+              <div class="note">
+                {% if k.is_builtin %}内置标签：{{ k.label }}在代码里有专门流程（{% if k.code == 'task' %}任务指派与审核{% elif k.code == 'notice' %}全组通知{% else %}类型兜底{% endif %}），
+                  所以只能改名字和颜色，不能删{% if k.code in UNDISABLABLE_KINDS %}、也不能停用{% endif %}。
+                {% else %}自建标签：随时可以改名字、颜色、发布权限，也可以在没人用时删掉。{% endif %}
+              </div>
+            </div>
+          </details>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <aside class="side">
+    <section class="card">
+      <h2>新建标签</h2>
+      <form method="post" action="{{ url_for('admin.kind_new') }}">
+        {{ csrf() }}
+        <label class="fld"><span>名称</span>
+          <input type="text" name="label" required maxlength="{{ KIND_LABEL_MAX }}"
+                 placeholder="听课记录"></label>
+
+        <div class="fld">
+          <span>标签颜色</span>
+          <div class="swatches">
+            {% for key, cname in KIND_PALETTE.items() %}
+            <label class="swatch" title="{{ cname }}">
+              <input type="radio" name="color" value="{{ key }}" class="sr-only"
+                     {{ 'checked' if key == 'teal' }}>
+              <span class="tag t-c-{{ key }}">{{ cname }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <label class="check fld">
+          <input type="checkbox" name="leader_only"><span>仅组长可发布</span></label>
+
+        <label class="fld"><span>网址标识（可以留空）</span>
+          <input type="text" name="code" maxlength="24" placeholder="留空自动生成">
+          <span class="hint">只在浏览器地址栏里出现，创建之后不能改 —— 改了历史话题的标签就对不上了。</span></label>
+
+        <button class="btn pri block">添加标签</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>说明</h2>
+      <p class="muted small">新加的标签会立刻出现在课题组页的标签栏和「发布」页里，
+        不用改代码，也不用重启。</p>
+      <p class="muted small">每种标签都能传附件、都能回复，用的是同一套功能。</p>
+      <p class="muted small"><b>想下架一个标签</b>，优先用「停用」：
+        停用后发布页不再出现它，已经发过的话题照样显示、照样能搜到。
+        只有从没用过（0 个话题）的标签才建议直接删。</p>
+      <p class="muted small"><b>发布权限</b>：勾上「仅组长可发布」，
+        就只有课题组长能发这类内容（像任务、公告那样）。</p>
+    </section>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* 颜色选择：原生 radio 的激活行为本来就对，这里只负责把选中态显示出来。 */
+  document.querySelectorAll('.swatch').forEach(function (lab) {
+    var box = lab.querySelector('input');
+    if (!box) { return; }
+    function sync() { lab.classList.toggle('on', box.checked); }
+    box.addEventListener('change', sync);
+    sync();
+  });
+</script>
+{% endblock %}

@@ -7,11 +7,12 @@
 <span class="av {{ cls }}" style="{{ avatar_style(name) }}">{{ avatar_char(name) }}</span>
 {%- endmacro %}
 
-{# 话题类型标签：色值类名与 kind 同名（discussion 例外，用 .t-disc）。
-   兜底给 t-disc，保证以后加了新 kind 但忘了配色时也不会显示成空白。 #}
+{# 话题类型标签：配色按「调色板键」来（类名 .t-c-<键>，见 app.css）。
+   类型清单在库里，管理员后台可以增删，所以这里只能查表，不能写死类型。
+   未知类型兜底给 t-c-soft，避免渲染出一个没颜色的空标签。 #}
 {% macro kind_tag(kind) -%}
-{%- set cls = 't-disc' if kind == 'discussion' else 't-' ~ kind -%}
-<span class="tag {{ cls if kind in TOPIC_KIND else 't-disc' }}">{{ TOPIC_KIND.get(kind, kind) }}</span>
+{%- set known = kind in TOPIC_KIND -%}
+<span class="tag t-c-{{ TOPIC_KIND_COLOR.get(kind, 'soft') if known else 'soft' }}">{{ TOPIC_KIND.get(kind, kind) }}</span>
 {%- endmacro %}
 
 {% macro status_tag(status) -%}

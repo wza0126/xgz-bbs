@@ -68,12 +68,18 @@ def execute_many(sql: str, seq):
 
 
 def init_db(app):
-    """建表 + 首次运行自动创建管理员。"""
+    """建表 + 灌话题类型种子 + 首次运行自动创建管理员。"""
     schema = (Path(app.root_path) / "schema.sql").read_text(encoding="utf-8")
     conn = connect(app.config["DB_PATH"])
     try:
         conn.executescript(schema)
         conn.commit()
+        # 话题类型清单存库（管理员可在后台增删）。已存在的 code 不会被覆盖，
+        # 所以每次启动跑一遍是安全的：只补「种子里有、库里没有」的类型。
+        from . import kinds as kindsm
+        added = kindsm.seed_defaults(conn)
+        if added:
+            app.logger.info("话题类型种子已补齐 %d 个", added)
         n = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if n == 0:
             from .auth import hash_password

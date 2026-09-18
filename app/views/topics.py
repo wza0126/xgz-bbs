@@ -5,6 +5,7 @@ from flask import (Blueprint, abort, flash, g, redirect, render_template, reques
 import config as cfg
 from .. import auth as authm
 from .. import db as dbm
+from .. import kinds as kindsm
 from .. import models
 from .. import utils
 from .files import claim_attachments, form_attach_ids
@@ -24,15 +25,16 @@ def create(board_id):
     members = models.members_of(board_id)
 
     if request.method == "POST":
-        kind = request.form.get("kind", "discussion")
-        if kind not in cfg.TOPIC_KIND:
-            kind = "discussion"
-        if kind in cfg.LEADER_ONLY_KINDS and not is_leader:
+        # 类型清单在库里（管理员后台可增删）：停用的类型不能再发，非法值回落兜底类型
+        kind = request.form.get("kind", cfg.FALLBACK_KIND)
+        if kind not in kindsm.postable():
+            kind = cfg.FALLBACK_KIND
+        if kind in kindsm.leader_only() and not is_leader:
             abort(403)
 
         title = (request.form.get("title") or "").strip()
         body = (request.form.get("body") or "").strip()
-        is_pinned = 1 if (request.form.get("is_pinned") and kind in cfg.PINNABLE_KINDS) else 0
+        is_pinned = 1 if (request.form.get("is_pinned") and kind in kindsm.pinnable()) else 0
 
         if len(title) < 2:
             flash("标题太短了，至少 2 个字", "error")
@@ -89,7 +91,7 @@ def create(board_id):
 
         return redirect(url_for("topics.detail", topic_id=topic_id))
 
-    return _render_new(board, "discussion", members, is_leader)
+    return _render_new(board, cfg.FALLBACK_KIND, members, is_leader)
 
 
 def _render_new(board, kind, members, is_leader):

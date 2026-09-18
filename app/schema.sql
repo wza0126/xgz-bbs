@@ -40,7 +40,22 @@ CREATE TABLE IF NOT EXISTS board_members (
 );
 CREATE INDEX IF NOT EXISTS idx_members_user ON board_members(user_id);
 
--- ---------- 话题（讨论 / 公告 / 任务）----------
+-- ---------- 话题类型（标签）—— 管理员可在后台自助增删 ----------
+CREATE TABLE IF NOT EXISTS topic_kinds (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT    NOT NULL UNIQUE,            -- 入库值：topics.kind 存的就是它，创建后不可改
+    label       TEXT    NOT NULL,                   -- 界面显示的中文名
+    color       TEXT    NOT NULL DEFAULT 'slate',   -- 调色板键，对应 app.css 的 .t-c-<键>
+    sort_order  INTEGER NOT NULL DEFAULT 0,         -- 标签栏顺序
+    leader_only INTEGER NOT NULL DEFAULT 0,         -- 1 = 仅组长可发布
+    pinnable    INTEGER NOT NULL DEFAULT 0,         -- 1 = 发布时可置顶
+    is_builtin  INTEGER NOT NULL DEFAULT 0,         -- 1 = 代码里有专门流程，不许删
+    is_active   INTEGER NOT NULL DEFAULT 1,         -- 0 = 停用：不出现在标签栏与发布页
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kinds_order ON topic_kinds(sort_order, id);
+
+-- ---------- 话题（讨论 / 公告 / 任务 / …）----------
 CREATE TABLE IF NOT EXISTS topics (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     board_id       INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,

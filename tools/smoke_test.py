@@ -219,8 +219,27 @@ pages = [
 for path, exp, label in pages:
     get(path, exp, label)
 
-# ---------- 4.5 话题类型：标签栏 / 筛选 / 发帖选项（清单来自 config，加类型后自动覆盖） ----------
-import config as _cfg
+# ---------- 4.5 话题类型：标签栏 / 筛选 / 发帖选项 ----------
+# 类型清单存在数据库里（管理员在后台可自助增删），所以测试也从库里读，不写死、不看 config。
+def db_kinds(active_only=False):
+    con = _con()
+    sql = ("SELECT code, label, color, leader_only, pinnable, is_active, is_builtin"
+           " FROM topic_kinds")
+    if active_only:
+        sql += " WHERE is_active = 1"
+    rows = [dict(r) for r in con.execute(sql + " ORDER BY sort_order, id")]
+    con.close()
+    return rows
+
+
+if not db_kinds():
+    raise SystemExit("[夹具] topic_kinds 表是空的 —— 服务启动时会自动灌种子，先启动一次服务。")
+
+KINDS = db_kinds()
+ACTIVE = [k for k in KINDS if k["is_active"]]
+LBL = {k["code"]: k["label"] for k in KINDS}
+LEADER_ONLY = tuple(k["code"] for k in KINDS if k["leader_only"])
+FREE_LABELS = [k["label"] for k in ACTIVE if not k["leader_only"]]
 
 
 def assert_true(cond, label, detail=""):
@@ -231,15 +250,15 @@ def assert_true(cond, label, detail=""):
 
 
 _code, _bp = get(f"/b/{B1}", 200)
-for _k in _cfg.TOPIC_KIND_ORDER:
-    _lb = _cfg.TOPIC_KIND[_k]
-    get(f"/b/{B1}?kind={_k}", 200, f"课题组 1·{_lb}筛选")
-    assert_true(f"kind={_k}" in _bp, f"课题组页标签栏有「{_lb}」", _k)
-    assert_true(f">{_lb}</a>" in _bp, f"课题组页有「{_lb}」链接文字", _lb)
+for _k in ACTIVE:
+    get(f"/b/{B1}?kind={_k['code']}", 200, f"课题组 1·{_k['label']}筛选")
+    assert_true(f"kind={_k['code']}" in _bp, f"课题组页标签栏有「{_k['label']}」", _k["code"])
+    assert_true(f">{_k['label']}</a>" in _bp, f"课题组页有「{_k['label']}」链接文字", _k["label"])
+assert_true("t-c-" in _bp, "类型标签用调色板类名渲染（后台换颜色即时生效，无需改 CSS）")
 
 _code, _np = get(f"/b/{B1}/new", 200)
-for _k, _lb in _cfg.TOPIC_KIND.items():
-    assert_true(f'value="{_k}"' in _np, f"发帖页有「{_lb}」选项", _k)
+for _k in ACTIVE:
+    assert_true(f'value="{_k["code"]}"' in _np, f"发帖页有「{_k['label']}」选项", _k["code"])
 assert_true("data-uploader" in _np, "发帖页自带附件上传区（与类型无关）")
 
 # ---------- 4.6 每种类型都能真的传上附件（发帖 -> 上传 -> 认领 -> 附件挂在话题上） ----------
@@ -268,8 +287,8 @@ def upload_file(board_id, filename, content, token):
         return e.code, {"raw": e.read().decode("utf-8", "replace")[:200]}
 
 
-for _k in ("plan", "record", "work", "resource"):
-    _lb = _cfg.TOPIC_KIND[_k]
+for _k in [k["code"] for k in ACTIVE if not k.get("is_builtin", 0)]:
+    _lb = LBL[_k]
     _ttl = f"冒烟测试·{_lb}（可删）"
     _, _h = get(f"/b/{B1}/new", 200)
     _tok = csrf_from(_h)
@@ -503,40 +522,244 @@ post("/login", {"_csrf": csrf_from(_lg), "username": "wuls", "password": "123456
 
 _, _mh = get(f"/b/{B1}/new", 200)
 assert_true('id="taskFields"' not in _mh, "组员发帖页没有组长专属字段")
-for _k, _lb in _cfg.TOPIC_KIND.items():
-    if _k in _cfg.LEADER_ONLY_KINDS:
-        assert_true(f'value="{_k}"' not in _mh, f"组员发帖页看不到「{_lb}」", _k)
+for _k in ACTIVE:
+    if _k["code"] in LEADER_ONLY:
+        assert_true(f'value="{_k["code"]}"' not in _mh, f"组员发帖页看不到「{_k['label']}」", _k["code"])
     else:
-        assert_true(f'value="{_k}"' in _mh, f"组员发帖页有「{_lb}」", _k)
+        assert_true(f'value="{_k["code"]}"' in _mh, f"组员发帖页有「{_k['label']}」", _k["code"])
 _hm = re.search(r'class="hint">\s*(.*?)\s*</span>', _mh, re.S)
 _hint = re.sub(r"\s+", " ", _hm.group(1)) if _hm else ""
 assert_true(_hint and "undefined" not in _hint, "组员提示语正常渲染（自动列出可发类型）", _hint[:120])
-assert_true(all(lb in _hint for lb in _cfg.TOPIC_KIND_FREE_LABELS),
+assert_true(all(lb in _hint for lb in FREE_LABELS),
             "组员提示语列全了可发类型", _hint[:120])
 
 # 越权发任务/公告要被服务端拦住（前端藏了不算数）
-for _k in _cfg.LEADER_ONLY_KINDS:
+for _k in LEADER_ONLY:
     post(f"/b/{B1}/new", {"_csrf": csrf_from(_mh), "kind": _k, "title": f"越权{_k}",
-                          "body": "x"}, 403, f"组员发「{_cfg.TOPIC_KIND[_k]}」→ 403")
+                          "body": "x"}, 403, f"组员发「{LBL.get(_k, _k)}」→ 403")
 
-# 组员发新类型（方案）+ 传附件，应成功
-_, _mh = get(f"/b/{B1}/new", 200)
-_mtok = csrf_from(_mh)
-_ust, _ures = upload_file(B1, "smoke-member-plan.txt", "组员上传的附件".encode(), _mtok)
-assert_true(_ust == 200 and _ures.get("ok"), "组员在发帖页上传附件", str(_ures)[:120])
-if _ust == 200 and _ures.get("ok"):
-    post(f"/b/{B1}/new", {"_csrf": _mtok, "kind": "plan", "title": "冒烟测试·组员方案（可删）",
-                          "body": "组员发起的方案，带附件。", "attach_ids": [str(_ures["id"])]},
-         200, "组员发布「方案」并带附件")
-    _c = _con()
-    _rr = _c.execute("SELECT id FROM topics WHERE title = '冒烟测试·组员方案（可删）'"
-                     " ORDER BY id DESC LIMIT 1").fetchone()
-    _c.close()
-    if _rr:
-        _, _dh = get(f"/t/{_rr['id']}", 200)
-        assert_true("smoke-member-plan.txt" in _dh, "组员发的「方案」详情页能看到附件")
-    else:
-        bad.append(("组员发的方案没建出来", 0, ""))
+# 组员发一个「全员可发」的类型 + 传附件，应成功。类型从库里挑，不写死。
+_MK = next((k for k in ACTIVE if not k["leader_only"] and not k["is_builtin"]), None)
+if _MK is None:
+    bad.append(("找不到组员可发的类型（库里没有非内置且非组长专属的类型）", 0, ""))
+else:
+    _mttl = f"冒烟测试·组员{_MK['label']}（可删）"
+    _, _mh = get(f"/b/{B1}/new", 200)
+    _mtok = csrf_from(_mh)
+    _ust, _ures = upload_file(B1, "smoke-member-start.txt", "组员上传的附件".encode(), _mtok)
+    assert_true(_ust == 200 and _ures.get("ok"), "组员在发帖页上传附件", str(_ures)[:120])
+    if _ust == 200 and _ures.get("ok"):
+        post(f"/b/{B1}/new", {"_csrf": _mtok, "kind": _MK["code"], "title": _mttl,
+                              "body": f"组员发起的{_MK['label']}，带附件。",
+                              "attach_ids": [str(_ures["id"])]},
+             200, f"组员发布「{_MK['label']}」并带附件")
+        _c = _con()
+        _rr = _c.execute("SELECT id FROM topics WHERE title = ? ORDER BY id DESC LIMIT 1",
+                         (_mttl,)).fetchone()
+        _c.close()
+        if _rr:
+            _, _dh = get(f"/t/{_rr['id']}", 200)
+            assert_true("smoke-member-start.txt" in _dh, f"组员发的「{_MK['label']}」详情页能看到附件")
+        else:
+            bad.append((f"组员发的「{_MK['label']}」没建出来", 0, ""))
+
+# ---------- 12. 管理后台：类型标签自助增删 ----------
+# 本次核心能力：加/改/停/删标签都在后台点几下完成，不用改代码、不用重新部署。
+# 注意 admin 不是课题组 1 的成员，所以「看标签栏 / 发帖」的断言要换成张老师（B1 组长）来做。
+
+def switch_to(username, password, note=""):
+    """切账号：先退出再登录，避免登录态残留导致后面全片误判。"""
+    _, _me = get("/me", 200)
+    post("/logout", {"_csrf": csrf_from(_me)}, 200, f"退出登录（切到{note or username}）")
+    _, _lg2 = get("/login", 200)
+    post("/login", {"_csrf": csrf_from(_lg2), "username": username, "password": password, "next": ""},
+         200, f"登录 {note or username}")
+
+
+def kinds_db():
+    """直接读库看类型表当前状态（后台操作是否真的落库）。"""
+    c = _con()
+    rows = [dict(r) for r in c.execute(
+        "SELECT id, code, label, color, leader_only, is_active, sort_order"
+        " FROM topic_kinds ORDER BY sort_order, id")]
+    c.close()
+    return rows
+
+
+def kind_by_label(label):
+    return next((r for r in kinds_db() if r["label"] == label), None)
+
+
+def admin_token():
+    return csrf_from(get("/admin/kinds", 200)[1])
+
+
+_ksuf = random.randint(100, 999)
+LAB_USED = f"冒烟标签{_ksuf}"          # 会被发一个话题，用来验证「有话题在用不许删」
+LAB_UNUSED = f"冒烟空标签{_ksuf}"      # 没人用，用来验证「能真删」
+LAB_LONG = "这个标签名字实在是太长了"
+CODE_USED = f"smk{_ksuf}"
+
+switch_to("admin", ADMIN_PASSWORD, "管理员（类型标签）")
+
+_kh = get("/admin/kinds", 200)[1]
+assert_true("类型标签" in _kh, "管理后台有「类型标签」页")
+assert_true(all(k["label"] in _kh for k in KINDS), "标签管理页列出了现有全部类型")
+assert_true("/admin/kinds/new" in _kh and "/move" in _kh, "标签管理页有新建与排序入口")
+
+# ① 新建标签（指定颜色与网址标识）
+_c, _r, _l = post("/admin/kinds/new", {"_csrf": admin_token(), "label": LAB_USED,
+                                       "color": "purple", "code": CODE_USED},
+                  200, "后台新建标签（指定颜色与标识）")
+assert_true("已添加标签" in flashes(_r), "新建标签后给了明确提示", flashes(_r)[:80])
+_made = kind_by_label(LAB_USED)
+assert_true(_made is not None and _made["color"] == "purple", "新标签已入库且颜色正确",
+            str(_made))
+
+# ② 重名 / 超长名 / 非法标识 都要被拦下
+_c, _r, _l = post("/admin/kinds/new", {"_csrf": admin_token(), "label": LAB_USED, "color": "ok"},
+                  200, "新建重名标签（应被拒）")
+assert_true("已经有一个叫" in flashes(_r), "重名标签被拒绝", flashes(_r)[:80])
+
+post("/admin/kinds/new", {"_csrf": admin_token(), "label": LAB_LONG, "color": "ok"},
+     200, "新建超长名称（应被拒）")
+assert_true(kind_by_label(LAB_LONG) is None, "超长名称没被写进库")
+
+post("/admin/kinds/new", {"_csrf": admin_token(), "label": f"冒烟非法{_ksuf}", "code": "Bad Code!"},
+     200, "新建非法网址标识（应被拒）")
+assert_true(kind_by_label(f"冒烟非法{_ksuf}") is None, "非法标识没被写进库")
+
+# ③ 再建一个不会被使用的标签（验证真删）
+post("/admin/kinds/new", {"_csrf": admin_token(), "label": LAB_UNUSED, "color": "rose"},
+     200, "新建一个标签（标识留空，自动生成）")
+_unused = kind_by_label(LAB_UNUSED)
+assert_true(_unused is not None and _unused["code"].startswith("k"),
+            "标识留空时自动生成了标识", str(_unused))
+
+# ④ 新标签要立刻出现在标签栏 / 筛选页 / 发布页（张老师的视角）
+switch_to("zhangls", "123456", "张老师（课题组 1 组长）")
+_, _bp_new = get(f"/b/{B1}", 200)
+assert_true(f">{LAB_USED}</a>" in _bp_new, "新标签立刻出现在课题组页标签栏")
+assert_true(f">{LAB_UNUSED}</a>" in _bp_new, "第二个新标签也在标签栏里")
+get(f"/b/{B1}?kind={CODE_USED}", 200, "新标签的筛选页可打开")
+_, _np_new = get(f"/b/{B1}/new", 200)
+assert_true(f'value="{CODE_USED}"' in _np_new, "新标签立刻出现在发布页的类型选择里")
+
+# 用它发一个话题：颜色要按后台所选渲染
+post(f"/b/{B1}/new", {"_csrf": csrf_from(_np_new), "kind": CODE_USED,
+                      "title": f"冒烟测试·{LAB_USED}（可删）",
+                      "body": "用于验证标签的颜色、改名与删除保护。"},
+     200, f"用新标签「{LAB_USED}」发布话题")
+_c = _con()
+_new_topic = _c.execute("SELECT id FROM topics WHERE title = ? ORDER BY id DESC LIMIT 1",
+                        (f"冒烟测试·{LAB_USED}（可删）",)).fetchone()
+_c.close()
+if _new_topic is None:
+    bad.append(("用新标签发布的话题没建出来", 0, LAB_USED))
+    NEW_TID = None
+else:
+    NEW_TID = _new_topic["id"]
+    _, _td = get(f"/t/{NEW_TID}", 200)
+    assert_true("t-c-purple" in _td, "新标签的话题按后台所选颜色显示（紫色）")
+    assert_true(LAB_USED in _td, "话题详情页显示新标签的名字")
+
+# ⑤ 有话题在用 → 不许删；没人用 → 能真删
+switch_to("admin", ADMIN_PASSWORD, "管理员")
+_c, _r, _l = post(f"/admin/kinds/{_made['id']}/delete", {"_csrf": admin_token()},
+                  200, "删除正在被使用的标签（应被拒）")
+assert_true("还有" in flashes(_r) and "停用" in flashes(_r), "有话题在用的标签被拦下并引导去停用",
+            flashes(_r)[:120])
+assert_true(kind_by_label(LAB_USED) is not None, "被使用的标签确实没被删掉")
+
+_c, _r, _l = post(f"/admin/kinds/{_unused['id']}/delete", {"_csrf": admin_token()},
+                  200, "删除没人使用的标签")
+assert_true(kind_by_label(LAB_UNUSED) is None, "空标签确实被删掉了")
+
+# ⑥ 内置标签：不许删；「讨论」不许停用（兜底类型）；「任务」可停用但要能启用回来
+_builtin = next((r for r in kinds_db() if r["label"] == "任务"), None)
+if _builtin:
+    _c, _r, _l = post(f"/admin/kinds/{_builtin['id']}/delete", {"_csrf": admin_token()},
+                      200, "删除内置标签「任务」（应被拒）")
+    assert_true("内置类型" in flashes(_r) and kind_by_label("任务") is not None,
+                "内置标签被拦下（代码里有专门流程）", flashes(_r)[:120])
+    post(f"/admin/kinds/{_builtin['id']}/toggle", {"_csrf": admin_token()},
+         200, "停用内置标签「任务」（应成功，可逆）")
+    _t1 = kind_by_label("任务")
+    assert_true(_t1 and _t1["is_active"] == 0,
+                "「任务」可以停用（有的教研组不做任务，停用后可随时启用回来）", str(_t1))
+    post(f"/admin/kinds/{_builtin['id']}/toggle", {"_csrf": admin_token()},
+         200, "把「任务」重新启用")
+    _t2 = kind_by_label("任务")
+    assert_true(_t2 and _t2["is_active"] == 1, "「任务」重新启用后回到标签栏与发布页", str(_t2))
+else:
+    bad.append(("找不到内置标签「任务」", 0, ""))
+
+_disc = next((r for r in kinds_db() if r["label"] == "讨论"), None)
+if _disc:
+    _c, _r, _l = post(f"/admin/kinds/{_disc['id']}/toggle", {"_csrf": admin_token()},
+                      200, "停用兜底标签「讨论」（应被拒）")
+    _disc_now = kind_by_label("讨论")
+    assert_true("不能停用" in flashes(_r) and _disc_now and _disc_now["is_active"] == 1,
+                "兜底标签「讨论」不能停用", flashes(_r)[:120])
+else:
+    bad.append(("找不到兜底标签「讨论」", 0, ""))
+
+# ⑦ 改名字 / 换颜色 / 改发布权限
+post(f"/admin/kinds/{_made['id']}/update",
+     {"_csrf": admin_token(), "label": f"{LAB_USED}改", "color": "orange", "leader_only": "1"},
+     200, "改标签名 + 换颜色 + 设为仅组长可发")
+_after = kind_by_label(f"{LAB_USED}改")
+assert_true(_after is not None and _after["color"] == "orange" and _after["leader_only"] == 1,
+            "改名 / 换色 / 发布权限都已生效", str(_after))
+
+# ⑧ 停用：发布页不再出现，但历史话题照常显示
+post(f"/admin/kinds/{_made['id']}/toggle", {"_csrf": admin_token()}, 200, "停用该标签")
+_st = kind_by_label(f"{LAB_USED}改")
+assert_true(_st is not None and _st["is_active"] == 0, "标签已停用（is_active=0）")
+
+switch_to("zhangls", "123456", "张老师")
+_, _bp_off = get(f"/b/{B1}", 200)
+assert_true(f">{LAB_USED}改</a>" not in _bp_off, "停用后标签栏里不再有这个标签")
+_, _np_off = get(f"/b/{B1}/new", 200)
+assert_true(f'value="{CODE_USED}"' not in _np_off, "停用后发布页不再提供该选项")
+get(f"/b/{B1}?kind={CODE_USED}", 200, "停用后旧筛选链接仍然能打开（历史内容不丢）")
+if NEW_TID:
+    _, _td2 = get(f"/t/{NEW_TID}", 200)
+    assert_true(f"{LAB_USED}改" in _td2, "停用只是不再可选，历史话题的标签照常显示")
+    assert_true("t-c-orange" in _td2, "换颜色对历史话题即时生效")
+
+# ⑨ 排序：上移一位后再下移回原位
+switch_to("admin", ADMIN_PASSWORD, "管理员")
+_order_before = [r["code"] for r in kinds_db()]
+_last_row = kinds_db()[-1]
+post(f"/admin/kinds/{_last_row['id']}/move", {"_csrf": admin_token(), "dir": "up"},
+     200, "把最后一个标签上移一位")
+_order_up = [r["code"] for r in kinds_db()]
+assert_true(_order_up != _order_before, "上移后顺序变了")
+assert_true(_order_up.index(_last_row["code"]) == len(_order_before) - 2,
+            "上移后该标签落到倒数第二位", str(_order_up))
+post(f"/admin/kinds/{_last_row['id']}/move", {"_csrf": admin_token(), "dir": "down"},
+     200, "再下移回原位")
+assert_true([r["code"] for r in kinds_db()] == _order_before, "下移后顺序复原")
+
+# ⑩ 收尾：把测试话题删掉，那个标签就变成「没人用」了，于是可以真删
+#    （顺带验证上一轮「有内容 → 不许删」不是死结）
+if NEW_TID:
+    switch_to("zhangls", "123456", "张老师")
+    post(f"/t/{NEW_TID}/delete", {"_csrf": csrf_from(get(f"/t/{NEW_TID}", 200)[1])},
+         200, "删除冒烟测试话题")
+    switch_to("admin", ADMIN_PASSWORD, "管理员")
+    post(f"/admin/kinds/{_made['id']}/delete", {"_csrf": admin_token()},
+         200, "话题清空后再删该标签（应成功）")
+    assert_true(kind_by_label(f"{LAB_USED}改") is None, "话题清空后标签可以真正删除")
+
+assert_true(len(kinds_db()) == len(KINDS), f"标签总数回到 {len(KINDS)} 个（没留下测试标签）",
+            str([k["code"] for k in kinds_db()]))
+assert_true(len([k for k in kinds_db() if k["is_active"]]) == len(ACTIVE),
+            f"启用中的标签数回到 {len(ACTIVE)} 个（后台增删没留下副作用）",
+            str([k["code"] for k in kinds_db() if k["is_active"]]))
+assert_true([r["code"] for r in kinds_db()] == [k["code"] for k in KINDS],
+            "标签顺序与测试前完全一致", str([r["code"] for r in kinds_db()]))
 
 print("=" * 66)
 print(f"通过 {len(ok)} 项，失败 {len(bad)} 项")

@@ -191,9 +191,8 @@ if victim:
     _, h = req(f"/admin/users/{victim['id']}/delete", {"_csrf": csrf(h)})
     check("名下还有" in flash_of(h), "拒绝删除有内容的账号（商瑜，回复 5 条）", flash_of(h))
 
-# ---------- 5.5 话题类型：标签栏 / 筛选 / 发帖选项齐全（只读，清单来自 config） ----------
-import config as _cfg
-
+# ---------- 5.5 话题类型：从线上页面自己读（类型清单在库里，别依赖本地 config） ----------
+# 只读：读标签栏的链接与文字、读发布页的选项、读后台标签管理页，全都不动数据。
 _, home = req("/")
 bids = sorted({int(x) for x in re.findall(r"/b/(\d+)", home)})
 bid = None
@@ -205,32 +204,48 @@ for b in bids:
 check(bid is not None, "找到一个能列话题的课题组页")
 if bid:
     _, bp = req(f"/b/{bid}")
-    missing = [lb for k, lb in _cfg.TOPIC_KIND.items() if f">{lb}</a>" not in bp]
-    check(not missing, f"课题组 #{bid} 标签栏类型齐全（{len(_cfg.TOPIC_KIND)} 种）",
-          f"缺：{'、'.join(missing)}" if missing else "")
-    for k in _cfg.TOPIC_KIND_ORDER:
-        check(f"kind={k}" in bp, f"有 kind={k} 筛选链接（{_cfg.TOPIC_KIND[k]}）")
-    for k in _cfg.TOPIC_KIND_ORDER:
-        _, tp = req(f"/b/{bid}?kind={k}")
-        check(len(tp) > 200, f"kind={k} 筛选页可打开（{_cfg.TOPIC_KIND[k]}）")
+    tabs = re.findall(r'kind=([a-z][a-z0-9_]{1,23})"[^>]*>([^<]{1,10})</a>', bp)
+    check(len(tabs) >= 3, f"课题组 #{bid} 标签栏读到 {len(tabs)} 个类型",
+          "、".join(lb for _, lb in tabs))
+    check(any(lb == "任务" for _, lb in tabs) and any(lb == "公告" for _, lb in tabs),
+          "标签栏里有内置的「任务 / 公告」")
+    for c, lb in tabs:
+        _, tp = req(f"/b/{bid}?kind={c}")
+        check(len(tp) > 200, f"kind={c} 筛选页可打开（{lb}）")
     _, np = req(f"/b/{bid}/new")
-    free_lack = [lb for k, lb in _cfg.TOPIC_KIND.items()
-                 if k not in _cfg.LEADER_ONLY_KINDS and f'value="{k}"' not in np]
-    check(not free_lack, "发帖页类型选项齐全（全员可发类型）",
-          f"缺：{'、'.join(free_lack)}" if free_lack else "")
-    # 登录账号不一定是这个组的组长，任务/公告选项按视角判断，别误报
-    if 'id="taskFields"' in np:
-        lead_lack = [lb for k, lb in _cfg.TOPIC_KIND.items()
-                     if k in _cfg.LEADER_ONLY_KINDS and f'value="{k}"' not in np]
-        check(not lead_lack, "发帖页含组长专属类型（任务 / 公告）",
-              f"缺：{'、'.join(lead_lack)}" if lead_lack else "")
+    if len(np) < 200:
+        check(False, "发帖页打不开（当前账号可能不是该组成员）")
+    elif 'id="taskFields"' in np:
+        lack = [lb for c, lb in tabs if f'value="{c}"' not in np]
+        check(not lack, "发布页类型选项齐全（组长视角）", f"缺：{'、'.join(lack)}" if lack else "")
     else:
-        LINES.append(f"… 当前账号在课题组 #{bid} 不是组长，跳过任务/公告选项检查")
-    check("data-uploader" in np, "发帖页自带附件上传区（所有类型通用）")
-    # 提示语由 config 派生（组员那句会列出可发类型），确认渲染出来了、没漏变量
+        check('value="discussion"' in np, "发布页有全员可发的类型（组员视角）")
+        check('value="notice"' not in np and 'value="task"' not in np,
+              "组员发布页没有「任务 / 公告」（仅组长可发）")
+    check("data-uploader" in np, "发布页自带附件上传区（所有类型通用）")
+    # 提示语是自动拼的，确认渲染出来了、没漏变量
     _hm = re.search(r'class="hint">\s*(.*?)\s*</span>', np, re.S)
     _hint = re.sub(r"\s+", " ", _hm.group(1)) if _hm else ""
-    check(_hint and "undefined" not in _hint, "发帖页类型提示语正常渲染", _hint[:80])
+    check(_hint and "undefined" not in _hint, "发布页类型提示语正常渲染", _hint[:80])
+
+# ---------- 5.55 后台「类型标签」页（只读） ----------
+_, kp = req("/admin/kinds")
+check("类型标签" in kp, "管理后台有「类型标签」页")
+check("/admin/kinds/new" in kp, "标签管理页有「新建标签」表单")
+if bid:
+    rows = re.findall(r'<div class="userrow[^"]*" id="k(\d+)">(.*?)</details>', kp, re.S)
+    active_labels = []
+    for _kid, _body in rows:
+        _m = re.search(r'<span class="tag t-c-[\w]+">([^<]+)</span>', _body)
+        if _m and "已停用" not in _body:
+            active_labels.append(_m.group(1))
+    check(len(rows) >= len(tabs), f"后台读到 {len(rows)} 个标签（标签栏显示 {len(tabs)} 个启用中的）",
+          "、".join(active_labels))
+    check(set(lb for _, lb in tabs) == set(active_labels),
+          "标签栏与后台「启用中」的标签完全对得上",
+          f"标签栏 {sorted(lb for _, lb in tabs)} vs 后台 {sorted(active_labels)}")
+else:
+    check("t-c-" in kp, "标签管理页按真实配色显示标签")
 
 # ---------- 5.6 任务说明不与正文重复（只读） ----------
 # 「任务即话题」：正文与任务说明同源，同源时页面上只应出现一次（展示在任务卡里）。

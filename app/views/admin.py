@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-"""管理后台：账号、批量导入、课题组总览。"""
+"""管理后台：账号、批量导入、课题组总览、话题标签。"""
 import re
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
+import config as cfg
 from .. import auth as authm
 from .. import db as dbm
+from .. import kinds as kindsm
 from .. import models
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -213,6 +215,163 @@ def user_delete(user_id):
     db.commit()
     flash(f"账号「{u['display_name']}（{u['username']}）」已删除。", "ok")
     return redirect(url_for("admin.users"))
+
+
+# ============================================================
+#  话题标签（topic_kinds）
+# ------------------------------------------------------------
+#  类型清单存在库里，这里给管理员一个自助增删的界面 —— 加一个标签不用再改代码、
+#  不用重新部署。几条安全规则：
+#   · 内置类型（讨论 / 公告 / 任务）不许删：代码里有专门流程；其中「讨论」还不许停用，
+#     因为它是类型非法时的兜底值。
+#   · 有话题在用的类型不许删（否则那些话题的标签就没了），引导改用「停用」。
+#     这与账号删除的思路一致：能停就别删。
+#   · code 创建后不可改：topics.kind 存的就是它，改了历史标签就对不上。
+# ============================================================
+
+def _back_kind(kid):
+    """回到标签列表，并把刚操作的那一行展开（不然面板一刷新就收起，看着像没生效）。"""
+    return redirect(url_for("admin.kinds", open=kid) + f"#k{kid}")
+
+
+def _kind_of(kid):
+    return dbm.row("SELECT * FROM topic_kinds WHERE id = ?", (kid,))
+
+
+@bp.route("/kinds")
+@authm.admin_required
+def kinds():
+    rows = dbm.rows("SELECT * FROM topic_kinds ORDER BY sort_order, id")
+    usage = {r["code"]: kindsm.usage(r["code"]) for r in rows}
+    return render_template("admin_kinds.html", rows=rows, usage=usage,
+                           open_id=request.args.get("open", type=int))
+
+
+@bp.route("/kinds/new", methods=["POST"])
+@authm.admin_required
+def kind_new():
+    label = (request.form.get("label") or "").strip()
+    code = (request.form.get("code") or "").strip().lower()
+    color = request.form.get("color") or "slate"
+    leader_only = 1 if request.form.get("leader_only") else 0
+
+    if color not in cfg.PALETTE:
+        color = "slate"
+
+    if not label or len(label) > cfg.KIND_LABEL_MAX:
+        flash(f"类型名称写 1-{cfg.KIND_LABEL_MAX} 个字，例如「方案」「听课记录」。", "error")
+        return redirect(url_for("admin.kinds"))
+    if dbm.row("SELECT id FROM topic_kinds WHERE label = ?", (label,)):
+        flash(f"已经有一个叫「{label}」的类型了，换个名字吧。", "error")
+        return redirect(url_for("admin.kinds"))
+    if not code:
+        code = kindsm.next_code()
+    if not re.fullmatch(cfg.KIND_CODE_RE, code):
+        flash("网址标识只能是 2-24 位小写字母、数字或下划线，并且以字母开头（例如 plan2）。", "error")
+        return redirect(url_for("admin.kinds"))
+    if dbm.row("SELECT id FROM topic_kinds WHERE code = ?", (code,)):
+        flash(f"网址标识 {code} 已经被占用了，换一个。", "error")
+        return redirect(url_for("admin.kinds"))
+
+    nxt = (dbm.scalar("SELECT COALESCE(MAX(sort_order), 0) FROM topic_kinds", (), 0) or 0) + 1
+    dbm.execute(
+        "INSERT INTO topic_kinds (code, label, color, sort_order, leader_only, pinnable,"
+        " is_builtin, is_active, created_at) VALUES (?,?,?,?,?,0,0,1,?)",
+        (code, label, color, nxt, leader_only, dbm.now_ts()))
+    kindsm.invalidate()
+    flash(f"已添加标签「{label}」。课题组页的标签栏和发布页马上就能用了，"
+          f"颜色不合适的可以在这里随时改。", "ok")
+    return redirect(url_for("admin.kinds"))
+
+
+@bp.route("/kinds/<int:kid>/update", methods=["POST"])
+@authm.admin_required
+def kind_update(kid):
+    k = _kind_of(kid)
+    if k is None:
+        flash("标签不存在", "error")
+        return redirect(url_for("admin.kinds"))
+
+    label = (request.form.get("label") or "").strip()
+    color = request.form.get("color") or k["color"]
+    leader_only = 1 if request.form.get("leader_only") else 0
+    if color not in cfg.PALETTE:
+        color = k["color"]
+
+    if not label or len(label) > cfg.KIND_LABEL_MAX:
+        flash(f"类型名称写 1-{cfg.KIND_LABEL_MAX} 个字。", "error")
+    elif dbm.row("SELECT id FROM topic_kinds WHERE label = ? AND id != ?", (label, kid)):
+        flash(f"已经有一个叫「{label}」的类型了。", "error")
+    else:
+        dbm.execute("UPDATE topic_kinds SET label = ?, color = ?, leader_only = ? WHERE id = ?",
+                    (label, color, leader_only, kid))
+        who = "仅组长可发" if leader_only else "全组成员可发"
+        flash(f"已保存：「{label}」· {cfg.PALETTE.get(color, color)} · {who}", "ok")
+    kindsm.invalidate()
+    return _back_kind(kid)
+
+
+@bp.route("/kinds/<int:kid>/toggle", methods=["POST"])
+@authm.admin_required
+def kind_toggle(kid):
+    k = _kind_of(kid)
+    if k is None:
+        flash("标签不存在", "error")
+        return redirect(url_for("admin.kinds"))
+    if k["is_active"] and not kindsm.can_disable(k["code"]):
+        flash(f"「{k['label']}」不能停用：类型填错时系统要靠它兜底，"
+              f"停了发布页就没有默认类型了。", "error")
+    else:
+        dbm.execute("UPDATE topic_kinds SET is_active = ? WHERE id = ?",
+                    (0 if k["is_active"] else 1, kid))
+        if k["is_active"]:
+            flash(f"「{k['label']}」已停用：新的发布里不再出现，"
+                  f"但已经发过的话题照常显示、照常能搜到。", "ok")
+        else:
+            flash(f"「{k['label']}」已启用，重新回到标签栏和发布页。", "ok")
+    kindsm.invalidate()
+    return _back_kind(kid)
+
+
+@bp.route("/kinds/<int:kid>/move", methods=["POST"])
+@authm.admin_required
+def kind_move(kid):
+    rows = [dict(r) for r in dbm.rows("SELECT id FROM topic_kinds ORDER BY sort_order, id")]
+    idx = next((i for i, r in enumerate(rows) if r["id"] == kid), None)
+    if idx is None:
+        flash("标签不存在", "error")
+        return redirect(url_for("admin.kinds"))
+    j = idx - 1 if request.form.get("dir") == "up" else idx + 1
+    if 0 <= j < len(rows):
+        rows[idx], rows[j] = rows[j], rows[idx]
+        kindsm.resequence(rows)
+        kindsm.invalidate()
+    return _back_kind(kid)
+
+
+@bp.route("/kinds/<int:kid>/delete", methods=["POST"])
+@authm.admin_required
+def kind_delete(kid):
+    k = _kind_of(kid)
+    if k is None:
+        flash("标签不存在", "error")
+        return redirect(url_for("admin.kinds"))
+
+    if not kindsm.can_delete(k["code"]):
+        flash(f"「{k['label']}」是内置类型（发布、指派或通知流程认它），不能删除。"
+              f"不想让人再发的话，用「停用」就行。", "error")
+        return _back_kind(kid)
+
+    n = kindsm.usage(k["code"])
+    if n:
+        flash(f"「{k['label']}」下面还有 {n} 个话题，删了这个标签它们就显示不出来了。"
+              f"改用「停用」吧 —— 停用后发布页不再出现，历史话题原样保留。", "error")
+        return _back_kind(kid)
+
+    dbm.execute("DELETE FROM topic_kinds WHERE id = ?", (kid,))
+    kindsm.invalidate()
+    flash(f"标签「{k['label']}」已删除。", "ok")
+    return redirect(url_for("admin.kinds"))
 
 
 @bp.route("/import", methods=["GET", "POST"])

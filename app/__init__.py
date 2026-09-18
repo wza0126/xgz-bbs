@@ -9,6 +9,7 @@ from markupsafe import Markup
 import config as cfg
 from . import auth as authm
 from . import db as dbm
+from . import kinds as kindsm
 from . import utils
 
 
@@ -76,15 +77,22 @@ def create_app():
     app.jinja_env.globals["csrf_token"] = _csrf_token
 
     # ---------- 模板可用 ----------
+    # 话题类型相关的几项，这里放的是 **兜底值**（config 里的种子）；
+    # 真实清单在下面的 context_processor 里按请求从库里读，会覆盖这些。
     app.jinja_env.globals.update(
         SITE_NAME=cfg.SITE_NAME,
         SITE_SUBTITLE=cfg.SITE_SUBTITLE,
         TASK_STATUS=cfg.TASK_STATUS,
         TOPIC_KIND=cfg.TOPIC_KIND,
         TOPIC_KIND_ORDER=cfg.TOPIC_KIND_ORDER,
+        TOPIC_KIND_COLOR=cfg.TOPIC_KIND_COLOR,
         LEADER_ONLY_KINDS=cfg.LEADER_ONLY_KINDS,
         PINNABLE_KINDS=cfg.PINNABLE_KINDS,
         TOPIC_KIND_FREE_LABELS=cfg.TOPIC_KIND_FREE_LABELS,
+        KIND_PALETTE=cfg.PALETTE,
+        KIND_LABEL_MAX=cfg.KIND_LABEL_MAX,
+        BUILTIN_KINDS=cfg.BUILTIN_KIND_CODES,
+        UNDISABLABLE_KINDS=cfg.UNDISABLABLE_KIND_CODES,
         MAX_UPLOAD_MB=cfg.MAX_UPLOAD_MB,
         fmt_dt=utils.fmt_dt,
         fmt_day=utils.fmt_day,
@@ -104,11 +112,25 @@ def create_app():
     @app.context_processor
     def _inject():
         user = authm.current_user()
-        return {
+        data = {
             "current_user": user,
             "unread": utils.unread_count(user["id"]) if user else 0,
             "is_admin": authm.is_admin(user),
         }
+        # 话题类型清单来自数据库（管理员可在后台自助增删），每个请求读一次。
+        # 读不到时退回 config 里注入的兜底值，页面不会因为一个标签渲染不出来。
+        try:
+            data.update(
+                TOPIC_KIND=kindsm.labels(),
+                TOPIC_KIND_ORDER=kindsm.order(),
+                TOPIC_KIND_COLOR=kindsm.color_map(),
+                LEADER_ONLY_KINDS=kindsm.leader_only(),
+                PINNABLE_KINDS=kindsm.pinnable(),
+                TOPIC_KIND_FREE_LABELS=kindsm.free_labels(),
+            )
+        except Exception as e:  # noqa: BLE001
+            app.logger.warning("读取话题类型失败，改用兜底清单：%s", e)
+        return data
 
     # ---------- 首页 ----------
     @app.route("/")

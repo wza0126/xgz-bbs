@@ -130,15 +130,18 @@ p{margin:0 0 8px}
   display:inline-block;padding:0 8px;border-radius:6px;font-size:11.5px;line-height:19px;
   white-space:nowrap;vertical-align:middle;
 }
-.t-task{background:var(--brand-l);color:var(--brand-d)}
-.t-notice{background:var(--warn-l);color:var(--warn-d)}
 .t-disc{background:var(--soft);color:var(--muted)}
-.t-training{background:var(--ok-l);color:var(--ok-d)}
-.t-achievement{background:var(--purple-l);color:#3C3489}
-.t-plan{background:var(--teal-l);color:var(--teal)}
-.t-record{background:var(--rose-l);color:var(--rose)}
-.t-work{background:var(--orange-l);color:var(--orange)}
-.t-resource{background:var(--slate-l);color:var(--slate)}
+/* 话题类型配色：库里只存「调色板键」，后台新增类型不用改 CSS（见 app/kinds.py） */
+.t-c-brand{background:var(--brand-l);color:var(--brand-d)}
+.t-c-ok{background:var(--ok-l);color:var(--ok-d)}
+.t-c-warn{background:var(--warn-l);color:var(--warn-d)}
+.t-c-danger{background:var(--danger-l);color:var(--danger-d)}
+.t-c-purple{background:var(--purple-l);color:#3C3489}
+.t-c-teal{background:var(--teal-l);color:var(--teal)}
+.t-c-rose{background:var(--rose-l);color:var(--rose)}
+.t-c-orange{background:var(--orange-l);color:var(--orange)}
+.t-c-slate{background:var(--slate-l);color:var(--slate)}
+.t-c-soft{background:var(--soft);color:var(--muted)}
 .t-grp{background:var(--purple-l);color:#3C3489}
 .t-pin{background:var(--danger-l);color:var(--danger-d)}
 .t-featured{background:var(--warn-l);color:var(--warn-d)}
@@ -291,6 +294,26 @@ p{margin:0 0 8px}
   position:absolute;left:0;top:0;width:1px;height:1px;margin:0;
   opacity:0;pointer-events:none;overflow:hidden;
 }
+/* 同上，供后台的「颜色选择」等单选用 */
+.sr-only{
+  position:absolute;left:0;top:0;width:1px;height:1px;margin:0;
+  opacity:0;pointer-events:none;overflow:hidden;
+}
+
+/* ---------------- 后台：类型标签的颜色选择 ---------------- */
+.swatches{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.swatch{
+  position:relative;display:inline-flex;align-items:center;cursor:pointer;
+  border:1px solid transparent;border-radius:999px;padding:2px;line-height:1;
+}
+.swatch:hover{border-color:var(--line2)}
+.swatch.on{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-l)}
+.swatch:focus-within{border-color:var(--brand)}
+.kindex{
+  flex:none;width:22px;height:22px;border-radius:50%;background:var(--soft);color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+}
+.kcode{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--ink2)}
 
 /* ---------------- 任务卡 ---------------- */
 .taskcard{border-color:#B5D4F4;background:var(--brand-l2);margin-top:16px}
@@ -399,6 +422,8 @@ p{margin:0 0 8px}
 .action-panel .note{flex-basis:100%;font-size:11.5px;color:var(--faint);line-height:1.5}
 .action-panel .uname-echo{font-size:12.5px;color:var(--ink2)}
 .action-panel .uname-echo b{font-weight:600;color:var(--ink)}
+/* 类型标签后台的编辑面板比账号面板简单，窄一点更好看 */
+.action-panel.narrow{min-width:min(94vw,400px)}
 
 /* ---------------- 响应式 ---------------- */
 @media (max-width:980px){
@@ -409,4 +434,5 @@ p{margin:0 0 8px}
   .nav{order:2}
   .wrap{padding:16px 14px 30px}
   .action-panel{min-width:0;width:min(88vw,340px)}
+  .action-panel.narrow{min-width:0;width:min(88vw,320px)}
 }

@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """共用查询。视图层尽量只调这里，SQL 集中好维护。"""
-import config as cfg
-
 from . import db as dbm
+from . import kinds as kindsm
 
 
 def my_boards(user_id, scope="all"):
@@ -77,7 +76,7 @@ def board_scoreboard(board_id):
 def topic_list(board_id, kind=None, sort="reply", page=1, per_page=20, keyword=None):
     where = ["t.board_id = ?"]
     args = [board_id]
-    if kind in cfg.TOPIC_KIND:
+    if kind in kindsm.codes():
         where.append("t.kind = ?")
         args.append(kind)
     if keyword:
