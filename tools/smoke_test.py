@@ -909,6 +909,31 @@ _left = _c.execute("SELECT COUNT(*) FROM topics WHERE title IN (?,?,?)",
 _c.close()
 assert_true(_left == 0, "富文本自测造的话题已全部清掉", f"还剩 {_left} 个")
 
+# ---------- 14. 列表里显示发布时间（课题组广场 + 课题组页话题列表） ----------
+# 需求：「课题列表里增加课题发布的时间显示」。
+# 广场卡片要有「建于 YYYY-MM-DD」，课题组页每行话题要有「发布于 <时间>」。
+_code, _pz = get("/plaza", 200)
+_built = re.findall(r"建于 (\d{4}-\d{2}-\d{2})", _pz)
+_n_cards = len(re.findall(r'class="bcard"', _pz))
+assert_true(_n_cards > 0, "广场读到了课题组卡片", f"{_n_cards} 张")
+assert_true(len(_built) == _n_cards, "每张课题组卡片都显示创建时间（建于 YYYY-MM-DD）",
+            f"建于 {len(_built)} 处 vs 卡片 {_n_cards} 张")
+assert_true("最近活动 " in _pz, "广场卡片同时标明「最近活动」，两个时间不会混淆")
+
+_code, _bd = get(f"/b/{B1}", 200)
+_rows = re.findall(r'<div class="tmeta">(.*?)</div>', _bd, re.S)
+_posted = [m for m in _rows if "发布于" in m]
+assert_true(len(_rows) > 0, "课题组页读到了话题行", f"{len(_rows)} 行")
+assert_true(len(_posted) == len(_rows), "每行话题都显示发布时间",
+            f"{len(_posted)}/{len(_rows)} 行")
+assert_true(all(re.search(r"发布于 \S", m) for m in _posted),
+            "发布时间不是空串（rel_time 真的渲染出了内容）",
+            str([re.sub(r"\s+", " ", m).strip()[:70] for m in _posted[:2]]))
+# 相对时间（3 天前 / 09-10）之外，悬停还要能看到精确到分钟的时间
+_tips = re.findall(r'<span title="\d{4}-\d{2}-\d{2} \d{2}:\d{2}">[^<]*发布于', _bd)
+assert_true(len(_tips) == len(_rows), "发布时间带精确到分钟的悬停提示",
+            f"{len(_tips)}/{len(_rows)} 行")
+
 print("=" * 66)
 print(f"通过 {len(ok)} 项，失败 {len(bad)} 项")
 print("=" * 66)

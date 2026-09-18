@@ -65,7 +65,7 @@
               {% if t.status == 'closed' %}<span class="tag t-todo">已关闭</span>{% endif %}
             </div>
             <div class="tmeta">
-              <span>{{ t.author_name }} 发布</span>
+              <span title="{{ t.created_at | dt }}">{{ t.author_name }} 发布于 {{ rel_time(t.created_at) }}</span>
               {% if t.kind == 'task' %}
                 <span>{% if t.due_date %}截止 {{ t.due_date }} · {% endif %}已提交 {{ t.assign_done }} / {{ t.assign_total }}</span>
               {% endif %}

@@ -21,13 +21,14 @@
           <span class="tag {{ 't-grp' if b.kind == 'project' else 't-disc' }}">{{ '课题组' if b.kind == 'project' else '综合教研组' }}</span>
           {% if b.is_public %}<span class="tag t-ok">公开组</span>{% endif %}
           {% if b.my_role == 'leader' %}<span class="tag t-pin">我是组长</span>{% endif %}
-          <span class="muted right small">{{ rel_time(b.last_active) if b.last_active else '还没有内容' }}</span>
+          <span class="muted right small">{{ '最近活动 ' ~ rel_time(b.last_active) if b.last_active else '还没有内容' }}</span>
         </div>
         <div class="bname">{{ b.name }}</div>
         {% if b.description %}<div class="bdesc">{{ b.description }}</div>{% endif %}
         <div class="row bmeta">
           <span class="muted">组长：{{ b.owner_name }}</span>
           <span class="muted">组员 {{ b.member_count }} 人</span>
+          <span class="muted">建于 {{ b.created_at | day }}</span>
           <span class="muted right">话题 {{ b.topic_count }} · 任务 {{ b.task_count }}</span>
         </div>
       </a>

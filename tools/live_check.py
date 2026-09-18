@@ -322,6 +322,25 @@ if _legacy:
         check(_rb.count('class="emoji-btn"') >= 60,
               f"评论区表情面板数量充足（{_rb.count('class=\"emoji-btn\"')} 个）")
 
+# ---------- 5.8 列表里的发布时间（只读） ----------
+# 需求：「课题列表里增加课题发布的时间显示」。
+# 广场卡片要看到「建于」，课题组页每行话题要看到「发布于」+ 精确到分钟的悬停提示。
+_, _plaza = req("/plaza")
+_n_cards = len(re.findall(r'class="bcard"', _plaza))
+_built = re.findall(r"建于 (\d{4}-\d{2}-\d{2})", _plaza)
+check(_n_cards > 0, f"广场读到 {_n_cards} 张课题组卡片")
+check(len(_built) == _n_cards, f"每张卡片都显示创建时间（建于 ×{len(_built)}）")
+check("最近活动 " in _plaza, "同时标明「最近活动」，两个时间不混淆")
+
+if bid:
+    _, _bp2 = req(f"/b/{bid}")
+    _rows = re.findall(r'<div class="tmeta">(.*?)</div>', _bp2, re.S)
+    _posted = [m for m in _rows if "发布于" in m]
+    check(len(_rows) > 0, f"课题组页读到 {len(_rows)} 行话题")
+    check(len(_posted) == len(_rows), f"每行话题都显示发布时间（{len(_posted)}/{len(_rows)}）")
+    _tips = re.findall(r'<span title="\d{4}-\d{2}-\d{2} \d{2}:\d{2}">[^<]*发布于', _bp2)
+    check(len(_tips) == len(_rows), f"发布时间带精确到分钟的悬停提示（{len(_tips)}/{len(_rows)}）")
+
 # ---------- 6. 无副作用确认 ----------
 _, page2 = req("/admin/users")
 AFTER = len(users_of(page2))
