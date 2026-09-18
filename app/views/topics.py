@@ -72,7 +72,7 @@ def create(board_id):
                 dbm.execute(
                     "INSERT OR IGNORE INTO task_assignees (task_id, user_id, status) VALUES (?,?, 'todo')",
                     (task_id, uid))
-            claim_attachments(form_attach_ids(request), user_id=user["id"],
+            claim_attachments(form_attach_ids(request, body, body_fmt), user_id=user["id"],
                               attachable_type="topic", attachable_id=topic_id, board_id=board_id)
             if assignee_ids:
                 due_txt = f"，请在 {due_date} 前完成" if due_date else ""
@@ -87,7 +87,7 @@ def create(board_id):
                          board_id=board_id, topic_id=topic_id, task_id=task_id)
             flash("任务已发布" + ("，已通知指派的老师" if assignee_ids else ""), "ok")
         else:
-            claim_attachments(form_attach_ids(request), user_id=user["id"],
+            claim_attachments(form_attach_ids(request, body, body_fmt), user_id=user["id"],
                               attachable_type="topic", attachable_id=topic_id, board_id=board_id)
             if kind == "notice":
                 utils.notify([m["id"] for m in members], actor_id=user["id"], kind="topic",
@@ -169,7 +169,7 @@ def reply(topic_id):
         if ok is None:
             parent_id = None
 
-    if not body and not form_attach_ids(request):
+    if not body and not form_attach_ids(request, body, body_fmt):
         flash("写点什么再发吧", "error")
         return redirect(url_for("topics.detail", topic_id=topic_id))
 
@@ -180,7 +180,7 @@ def reply(topic_id):
         " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
         (topic_id, user["id"], parent_id, floor, body, body_fmt, ts, ts))
 
-    claim_attachments(form_attach_ids(request), user_id=user["id"],
+    claim_attachments(form_attach_ids(request, body, body_fmt), user_id=user["id"],
                       attachable_type="post", attachable_id=post_id, board_id=topic["board_id"])
 
     dbm.execute(
@@ -274,7 +274,7 @@ def edit(topic_id):
             dbm.execute("UPDATE topics SET title = ?, body = ?, body_format = ?, updated_at = ?"
                         " WHERE id = ?",
                         (title[:120], body, body_fmt, dbm.now_ts(), topic_id))
-            claim_attachments(form_attach_ids(request), user_id=user["id"],
+            claim_attachments(form_attach_ids(request, body, body_fmt), user_id=user["id"],
                               attachable_type="topic", attachable_id=topic_id,
                               board_id=topic["board_id"])
             if topic["kind"] == "task":

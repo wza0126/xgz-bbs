@@ -46,7 +46,7 @@
       <span id="bodyLabel">{{ '任务说明' if kind == 'task' else '正文' }}</span>
       {{ rich_editor('', 'text',
            '写清任务要求、交付物与验收标准（会展示在任务卡里）' if kind == 'task'
-           else '把背景、要求、参考资料交代清楚', 7) }}
+           else '把背景、要求、参考资料交代清楚', 7, 'body', board.id) }}
     </div>
 
     {% if is_leader %}

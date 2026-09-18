@@ -65,7 +65,7 @@ def submit(topic_id):
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("topics.detail", topic_id=topic_id) + "#task")
-    att_ids = form_attach_ids(request)
+    att_ids = form_attach_ids(request, body, body_fmt)
     if not body and not att_ids and not a["submission_post_id"]:
         flash("写点说明或者传个附件再提交", "error")
         return redirect(url_for("topics.detail", topic_id=topic_id) + "#task")

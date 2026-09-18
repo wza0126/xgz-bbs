@@ -88,9 +88,14 @@
      ③ 每次输入把编辑区 innerHTML 同步回 textarea，并把 body_format 设成 html
    所以服务端两条路径都得能正确处理 —— 见 app/richtext.py: parse_body。
    textarea 里始终放**纯文本**（html 内容也先转纯文本），这样万一没 JS，
-   打开编辑页看到的是可读的文字而不是空框，不会一保存就把正文清空。 #}
-{% macro rich_editor(value='', fmt='text', placeholder='', rows=6, field='body') -%}
-<div class="rte" data-rte>
+   打开编辑页看到的是可读的文字而不是空框，不会一保存就把正文清空。
+
+   图片（board 传了才出现）：插图走附件体系 —— 上传成 draft 附件，拿到
+   `/f/<id>/inline` 地址插进正文，同时把 id 写进隐藏的 attach_ids 字段，
+   提交时被认领成话题/回复的附件。这样图片的可见性、生命周期、导出打包
+   全都跟正文绑在一起，不用另造一套图片表。 #}
+{% macro rich_editor(value='', fmt='text', placeholder='', rows=6, field='body', board=0) -%}
+<div class="rte" data-rte data-rte-board="{{ board }}">
   <div class="rte-bar hide" data-rte-bar>
     <button type="button" class="rte-btn b" data-cmd="bold" title="加粗（Ctrl+B）">B</button>
     <button type="button" class="rte-btn i" data-cmd="italic" title="斜体（Ctrl+I）">I</button>
@@ -103,6 +108,8 @@
     <button type="button" class="rte-btn txt" data-cmd="formatBlock" data-arg="pre" title="代码块（等宽、保留空格）">代码</button>
     <span class="rte-sp"></span>
     <button type="button" class="rte-btn txt" data-link title="给选中的文字加链接">链接</button>
+    {% if board %}<button type="button" class="rte-btn txt" data-img
+            title="插入图片：点这里选，也可以直接把图片拖进来或粘贴进来">图片</button>{% endif %}
     <button type="button" class="rte-btn txt" data-cmd="removeFormat" title="清除选中部分的格式">清格式</button>
     <span class="rte-sp"></span>
     <button type="button" class="rte-btn txt emo" data-emoji-toggle title="插入表情">☺ 表情</button>
@@ -116,6 +123,11 @@
       {%- for e in EMOJI %}<button type="button" class="emoji-btn" data-emoji="{{ e }}">{{ e }}</button>{% endfor -%}
     </div>
   </div>
+  {% if board %}
+  <input type="file" class="sr-only" multiple data-rte-img
+         accept="image/png,image/jpeg,image/gif,image/webp,image/bmp">
+  <div class="rte-up hide" data-rte-up></div>
+  {% endif %}
   <textarea name="{{ field }}" rows="{{ rows }}" class="ta" data-rte-src
             placeholder="{{ placeholder }}">{{ to_plain(value, fmt) }}</textarea>
   <input type="hidden" name="{{ field }}_format" value="text" data-rte-format>

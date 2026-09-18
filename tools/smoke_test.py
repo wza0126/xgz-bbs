@@ -6,6 +6,7 @@
 """
 import http.cookiejar
 import io
+import json
 import os
 import re
 import sqlite3
@@ -264,29 +265,39 @@ for _k in ACTIVE:
 assert_true("data-uploader" in _np, "发帖页自带附件上传区（与类型无关）")
 
 # ---------- 4.6 每种类型都能真的传上附件（发帖 -> 上传 -> 认领 -> 附件挂在话题上） ----------
-import json as _json
 
 
-def upload_file(board_id, filename, content, token):
-    """按前端的 multipart 约定往 /upload 传一个文件，返回 (状态码, json)。"""
+def upload_file(board_id, filename, content, token, kind=None, ctype="text/plain"):
+    """按前端的 multipart 约定往 /upload 传一个文件，返回 (状态码, json)。
+
+    kind="image" + 位图 ctype 走「正文插图」那条路（服务端只收位图）；
+    默认不传 kind，就是普通附件上传。
+    """
     if not token:
         # 页面没加载出来（服务没起 / 被踢回登录页）时别抛异常，让用例如实报失败
         return 0, {"raw": "没拿到 csrf token，发帖页可能没打开"}
     bd = "----smoke7788boundary"
     buf = []
-    for k, v in (("board_id", str(board_id)), ("attachable_type", "draft"), ("attachable_id", "0")):
+    fields = [("board_id", str(board_id)), ("attachable_type", "draft"), ("attachable_id", "0")]
+    if kind:
+        fields.append(("kind", kind))
+    for k, v in fields:
         buf.append(f'--{bd}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
     buf.append(f'--{bd}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
-               f'Content-Type: text/plain\r\n\r\n'.encode() + content + b"\r\n")
+               f'Content-Type: {ctype}\r\n\r\n'.encode() + content + b"\r\n")
     buf.append(f"--{bd}--\r\n".encode())
     rq = urllib.request.Request(BASE + "/upload", data=b"".join(buf), method="POST")
     rq.add_header("Content-Type", f"multipart/form-data; boundary={bd}")
     rq.add_header("X-CSRF-Token", token)
     try:
         with opener.open(rq, timeout=30) as r:
-            return r.status, _json.loads(r.read().decode("utf-8", "replace"))
+            return r.status, json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
-        return e.code, {"raw": e.read().decode("utf-8", "replace")[:200]}
+        raw = e.read().decode("utf-8", "replace")
+        try:
+            return e.code, json.loads(raw)
+        except Exception:  # noqa: BLE001
+            return e.code, {"raw": raw[:200]}
 
 
 for _k in [k["code"] for k in ACTIVE if not k.get("is_builtin", 0)]:
@@ -933,6 +944,136 @@ assert_true(all(re.search(r"发布于 \S", m) for m in _posted),
 _tips = re.findall(r'<span title="\d{4}-\d{2}-\d{2} \d{2}:\d{2}">[^<]*发布于', _bd)
 assert_true(len(_tips) == len(_rows), "发布时间带精确到分钟的悬停提示",
             f"{len(_tips)}/{len(_rows)} 行")
+
+# ---------- 15. 正文插图：上传 → 插入 → 认领 → 清洗 → 删帖连图清理 ----------
+# 需求：「正文还是不能插入图片」。图片复用附件体系：先传成 draft 附件，
+# 正文里只认本站地址 /f/<id>/inline，提交时把附件认领到这条话题/回复上 ——
+# 于是图片的可见性、生命周期、导出打包全都跟着正文走，不用另造一张图片表。
+GIF_1PX = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff"
+           b"!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+_, _img_new = get(f"/b/{B1}/new", 200, "发帖页（插图用例）")
+_img_tk = csrf_from(_img_new)
+
+
+def _pic(fname, content, ctype="image/gif", kind="image"):
+    """走插图那条上传路（kind=image 时服务端只收位图）。"""
+    return upload_file(B1, fname, content, _img_tk, kind=kind, ctype=ctype)
+
+
+_st, _up = _pic("冒烟配图.gif", GIF_1PX, "image/gif")
+assert_true(_st == 200 and bool(_up.get("ok")), "图片上传成功", str(_up)[:160])
+IMG_ID = _up.get("id")
+assert_true(bool(IMG_ID), "上传返回附件 id", str(_up)[:160])
+assert_true(re.fullmatch(r"/f/\d+/inline", _up.get("preview") or "") is not None,
+            "返回的预览地址是站内页内地址", str(_up.get("preview")))
+assert_true(_up.get("url") == f"/f/{IMG_ID}", "下载地址与预览地址分开", str(_up.get("url")))
+
+_st2, _up2 = _pic("冒充图片.txt", b"not an image", "text/plain")
+assert_true(_st2 == 400 and "图片" in (_up2.get("error") or ""),
+            "非图片文件当插图上传被拒", f"{_st2} {_up2}")
+_st3, _up3 = _pic("矢量.svg", b"<svg onload=alert(1)></svg>", "image/svg+xml")
+assert_true(_st3 == 400, "svg 进不了正文（只收位图）", f"{_st3} {_up3}")
+_st4, _up4 = _pic("普通附件.txt", b"hello", "text/plain", kind="")
+assert_true(_st4 == 200 and bool(_up4.get("ok")), "普通附件上传不受插图限制影响",
+            str(_up4)[:160])
+
+# 发一条图文帖，正文里放站内图片
+IMG_TITLE = "冒烟测试：正文插图（可删）"
+_, _img_new2 = get(f"/b/{B1}/new", 200)
+post(f"/b/{B1}/new", {"_csrf": csrf_from(_img_new2), "kind": "discussion", "title": IMG_TITLE,
+                      "body": f'<p>图来了</p><img src="/f/{IMG_ID}/inline" alt="冒烟配图">',
+                      "body_format": "html", "attach_ids": str(IMG_ID)},
+     200, "发布带图片的话题")
+_c = _con()
+_it = _c.execute("SELECT id, body_format FROM topics WHERE title = ? ORDER BY id DESC LIMIT 1",
+                 (IMG_TITLE,)).fetchone()
+_ia = _c.execute("SELECT attachable_type, attachable_id, board_id FROM attachments WHERE id = ?",
+                 (IMG_ID,)).fetchone()
+_c.close()
+IMG_TID = _it["id"] if _it else None
+assert_true(IMG_TID is not None, "图文话题已建立")
+assert_true(bool(_it) and _it["body_format"] == "html", "图文话题按 html 格式入库")
+assert_true(bool(_ia) and _ia["attachable_type"] == "topic" and _ia["attachable_id"] == IMG_TID,
+            "图片附件被认领到话题上", str(dict(_ia) if _ia else None))
+assert_true(bool(_ia) and _ia["board_id"] == B1, "附件归属课题组正确",
+            str(dict(_ia) if _ia else None))
+
+_, _ip = get(f"/t/{IMG_TID}", 200, "图文话题详情页")
+assert_true(f'<img src="/f/{IMG_ID}/inline"' in _ip, "详情页渲染出正文图片")
+assert_true('alt="冒烟配图"' in _ip, "图片 alt 保留")
+assert_true("body-text rich" in _ip, "图文正文走富文本容器")
+assert_true("冒烟配图.gif" in _ip, "图片也在附件区（能下载原图）")
+
+# 这里要按**原始字节**取（get() 会按 utf-8 解码，二进制图会失真）
+with opener.open(f"{BASE}/f/{IMG_ID}/inline", timeout=20) as _ir:
+    _img_raw = _ir.read()
+    _img_ctype = _ir.headers.get("Content-Type", "")
+assert_true(_img_raw == GIF_1PX, "页内预览返回的就是原图字节", f"{len(_img_raw)} bytes")
+assert_true(_img_ctype.startswith("image/gif"), "Content-Type 按图片返回", _img_ctype)
+try:
+    with noredirect.open(f"{BASE}/f/{IMG_ID}/inline", timeout=10) as _r:
+        bad.append(("未登录竟然能直接看正文图片", _r.status, ""))
+except urllib.error.HTTPError as _e:
+    assert_true(_e.code == 302, "未登录看正文图片被挡回登录页", f"code={_e.code}")
+
+# 清洗：外链图 / onerror / javascript: 一律进不来
+IMG_XSS_TITLE = "冒烟测试：图片清洗（可删）"
+_, _img_new3 = get(f"/b/{B1}/new", 200)
+post(f"/b/{B1}/new",
+     {"_csrf": csrf_from(_img_new3), "kind": "discussion", "title": IMG_XSS_TITLE,
+      "body": ('<p>正常文字</p><img src="https://evil.com/x.png">'
+               f'<img src="/f/{IMG_ID}/inline" onerror="alert(1)">'
+               '<img src="javascript:alert(2)">'),
+      "body_format": "html"}, 200, "发布含危险图片的话题")
+_c = _con()
+_ix = _c.execute("SELECT id, body FROM topics WHERE title = ? ORDER BY id DESC LIMIT 1",
+                 (IMG_XSS_TITLE,)).fetchone()
+_c.close()
+IMG_XSS_TID = _ix["id"] if _ix else None
+if _ix is None:
+    bad.append(("含危险图片的话题没建出来", 0, ""))
+else:
+    _xb = _ix["body"]
+    assert_true("evil.com" not in _xb, "外链图片被清掉")
+    assert_true("onerror" not in _xb, "图片上的 onerror 被清掉")
+    assert_true("javascript:alert(2)" not in _xb, "javascript: 图源被清掉")
+    assert_true(f'<img src="/f/{IMG_ID}/inline">' in _xb, "合法站内图片保留")
+    assert_true("正常文字" in _xb, "同一条正文里的文字不受影响")
+    _, _xd2 = get(f"/t/{IMG_XSS_TID}", 200, "含危险图片话题的详情页")
+    assert_true("evil.com" not in _xd2 and "alert(1)" not in _xd2, "页面上看不到任何载荷")
+
+# 只发一张图、不写字，也要发得出去（is_blank_html 不能把纯图正文判成空）
+IMG_ONLY_TITLE = "冒烟测试：只发一张图（可删）"
+_, _img_new4 = get(f"/b/{B1}/new", 200)
+post(f"/b/{B1}/new", {"_csrf": csrf_from(_img_new4), "kind": "discussion",
+                      "title": IMG_ONLY_TITLE,
+                      "body": f'<img src="/f/{IMG_ID}/inline">', "body_format": "html"},
+     200, "发布只有一张图的话题")
+_c = _con()
+_io = _c.execute("SELECT id FROM topics WHERE title = ? ORDER BY id DESC LIMIT 1",
+                 (IMG_ONLY_TITLE,)).fetchone()
+_c.close()
+IMG_ONLY_TID = _io["id"] if _io else None
+assert_true(IMG_ONLY_TID is not None, "只有一张图的正文没被判成空")
+
+# 收尾：删掉这三个话题，图片附件应随话题一起清掉，磁盘文件也不留
+_c = _con()
+_img_row = _c.execute("SELECT stored_path FROM attachments WHERE id = ?", (IMG_ID,)).fetchone()
+_c.close()
+IMG_PATH = (DB_PATH.parent / "uploads" / _img_row["stored_path"]) if _img_row else None
+assert_true(bool(IMG_PATH and IMG_PATH.exists()), "图片确实落在 uploads 目录里")
+for _tid in (IMG_TID, IMG_XSS_TID, IMG_ONLY_TID):
+    if _tid:
+        post(f"/t/{_tid}/delete", {"_csrf": csrf_from(get(f"/t/{_tid}", 200)[1])},
+             200, f"删除插图冒烟话题 #{_tid}")
+_c = _con()
+_left_img = _c.execute("SELECT COUNT(*) FROM topics WHERE title IN (?,?,?)",
+                       (IMG_TITLE, IMG_XSS_TITLE, IMG_ONLY_TITLE)).fetchone()[0]
+_att_left = _c.execute("SELECT COUNT(*) FROM attachments WHERE id = ?", (IMG_ID,)).fetchone()[0]
+_c.close()
+assert_true(_left_img == 0, "插图自测造的话题已全部清掉", f"还剩 {_left_img} 个")
+assert_true(_att_left == 0, "删话题时图片附件记录一起清掉")
+assert_true(bool(IMG_PATH and not IMG_PATH.exists()), "图片文件也从 uploads 里删掉了")
 
 print("=" * 66)
 print(f"通过 {len(ok)} 项，失败 {len(bad)} 项")

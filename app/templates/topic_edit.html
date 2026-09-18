@@ -21,7 +21,7 @@
 
     <div class="fld">
       <span>{{ '任务说明' if task else '正文' }}</span>
-      {{ rich_editor(topic.body, topic.body_format, '', 7) }}
+      {{ rich_editor(topic.body, topic.body_format, '', 7, 'body', topic.board_id) }}
     </div>
 
     {% if task %}

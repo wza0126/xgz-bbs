@@ -72,6 +72,7 @@
 window.BBS = {
   csrf: {{ csrf_token() | tojson }},
   maxUpload: {{ MAX_UPLOAD_MB }},
+  maxImage: {{ IMAGE_MAX_MB }},
   urls: { upload: {{ url_for('files.upload') | tojson }},
           notifCount: {{ url_for('notify.count') | tojson }} }
 };

@@ -7,6 +7,7 @@ from flask import (Blueprint, abort, current_app, jsonify, render_template, requ
 
 from .. import auth as authm
 from .. import db as dbm
+from .. import richtext
 from .. import utils
 
 bp = Blueprint("files", __name__)
@@ -14,8 +15,20 @@ bp = Blueprint("files", __name__)
 
 # ---------- 上传表单辅助 ----------
 
-def form_attach_ids(req):
-    return [int(x) for x in req.form.getlist("attach_ids") if x.isdigit()]
+def form_attach_ids(req, body=None, fmt=None):
+    """要认领的附件 id：表单隐藏字段 + 正文里引用到的图片附件。
+
+    正文图片有两条认领路径，这里是第二条：
+      ① 编辑器插入图片时会把附件 id 写进隐藏字段 attach_ids（正常路径）；
+      ② 这里再从正文 HTML 里扫一遍 `/f/<id>/inline`（兜底）。
+    只有第二条能挡住「JS 没同步上」「手写 HTML 提交」「改完正文又删掉图片」这类情况。
+    两条都走 claim_attachments 的同一条 SQL，那里限定 owner_id + attachable_type='draft'，
+    所以拿别人的附件 id 也认领不走。
+    """
+    ids = [int(x) for x in req.form.getlist("attach_ids") if x.isdigit()]
+    if fmt == "html" and body:
+        ids += richtext.extract_att_ids(body)
+    return list(dict.fromkeys(ids))
 
 
 def claim_attachments(ids, *, user_id, attachable_type, attachable_id, board_id):
@@ -52,6 +65,14 @@ def upload():
     if a_type == "draft":
         # 草稿阶段还没目标，等表单提交时再认领
         pass
+
+    # 正文插图：只收位图。svg 挡在这里 —— 它能在同源下执行脚本，
+    # 混进正文就该走「附件」而不是「图片」这条路。
+    if (request.form.get("kind") or "").strip() == "image":
+        ext = fs.filename.replace("\\", "/").rsplit("/", 1)[-1]
+        ext = ext.rsplit(".", 1)[-1].lower() if "." in ext else ""
+        if ext not in current_app.config["IMAGE_EXT"]:
+            return jsonify(ok=False, error="只能插入图片（png / jpg / gif / webp / bmp）"), 400
 
     try:
         att_id = utils.save_upload(fs, owner_id=user["id"], board_id=board_id,
@@ -109,8 +130,15 @@ def inline(attach_id):
     path = utils.att_abs_path(att)
     if not path.exists():
         abort(404)
-    return send_file(str(path), as_attachment=False, download_name=att["orig_name"],
+    resp = send_file(str(path), as_attachment=False, download_name=att["orig_name"],
                      mimetype=att["mime"] or "application/octet-stream")
+    # SVG 是唯一能在同源下真的跑起脚本的「图片」：直接点开预览就等于送它一个
+    # 执行上下文（存储型 XSS 的老套路）。加 sandbox 断掉脚本与本站 Cookie；
+    # 位图、PDF、文本预览都不受影响。正文里的 <img> 本来就执行不了脚本，两者互不干扰。
+    if att["ext"] in ("svg", "svgz"):
+        resp.headers["Content-Security-Policy"] = \
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+    return resp
 
 
 def redirect_download(attach_id):

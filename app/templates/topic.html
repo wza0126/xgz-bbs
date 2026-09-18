@@ -147,7 +147,7 @@
           {{ csrf() }}
           {{ rich_editor(sub_post.body if sub_post else '',
                          sub_post.body_format if sub_post else 'text',
-                         '写点说明：做了什么、遇到什么问题、需要谁配合……', 4) }}
+                         '写点说明：做了什么、遇到什么问题、需要谁配合……', 4, 'body', board.id) }}
           {{ upload_area(board.id, 'draft', 0) }}
           <div class="row top-gap">
             <button class="btn pri" type="submit">{{ '重新提交' if my_assignee.status == 'rejected' else '标记完成并提交' }}</button>
@@ -232,7 +232,8 @@
           正在回复 <b id="replyToName"></b>
           <button type="button" class="linkish" id="cancelReply">取消</button>
         </div>
-        {{ rich_editor('', 'text', '写下你的想法……用 @姓名 可以通知某人；点「☺ 表情」可以插表情', 4) }}
+        {{ rich_editor('', 'text', '写下你的想法……用 @姓名 可以通知某人；点「☺ 表情」可以插表情，点「图片」可以插图',
+                       4, 'body', board.id) }}
         {{ upload_area(board.id, 'draft', 0) }}
         <div class="row top-gap">
           <button class="btn pri" type="submit">发表回复</button>

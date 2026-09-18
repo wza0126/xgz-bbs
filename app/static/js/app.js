@@ -6,6 +6,7 @@
 
   var CSRF = (window.BBS && window.BBS.csrf) || '';
   var MAXMB = (window.BBS && window.BBS.maxUpload) || 50;
+  var MAXIMG = (window.BBS && window.BBS.maxImage) || 5;
   var UPLOAD_URL = (window.BBS && window.BBS.urls && window.BBS.urls.upload) || '/upload';
   var uploading = 0;
 
@@ -250,6 +251,7 @@
       src.value = empty ? '' : area.innerHTML;
       fmtIn.value = empty ? 'text' : 'html';
       area.classList.toggle('is-empty', empty);
+      syncAttachIds();
     }
 
     // 打字/删字都要实时同步：textarea 才是提交时真正被读的字段，
@@ -404,21 +406,182 @@
       });
     }
 
+    // ---- 图片 ----
+    // 插图走附件体系：上传成 draft 附件 → 拿到 /f/<id>/inline 插进正文 →
+    // 同时把 id 记进隐藏字段 attach_ids，提交时被认领到这条话题/回复上。
+    // 三个入口（工具栏按钮 / 拖进来 / 粘贴）最后都汇到 uploadImage()。
+    var imgBtn = bar.querySelector('[data-img]');
+    var imgInput = root.querySelector('[data-rte-img]');
+    var upBar = root.querySelector('[data-rte-up]');
+    var boardId = root.getAttribute('data-rte-board') || '';
+    var pendingImgs = 0;
+    var upTimer = null;
+
+    function noteUp(text, isErr) {
+      if (!upBar) { return; }
+      upBar.textContent = text;
+      upBar.classList.toggle('err', !!isErr);
+      upBar.classList.remove('hide');
+    }
+
+    function clearUpLater(ms) {
+      if (upTimer) { clearTimeout(upTimer); }
+      upTimer = setTimeout(function () {
+        if (!pendingImgs && upBar) { upBar.classList.add('hide'); }
+      }, ms);
+    }
+
+    function addHiddenAtt(id) {
+      if (!form) { return; }
+      var has = form.querySelector('input[name="attach_ids"][value="' + id + '"]');
+      if (has) { return; }
+      var h = document.createElement('input');
+      h.type = 'hidden';
+      h.name = 'attach_ids';
+      h.value = id;
+      h.setAttribute('data-rte-att', id);
+      form.appendChild(h);
+    }
+
+    // 正文里删掉的图，对应的隐藏字段也一起撤掉，免得提交后附件区
+    // 冒出一张正文里根本没有的图。服务端只认正文里出现过的图，这里保持一致。
+    function syncAttachIds() {
+      if (!form) { return; }
+      var used = {};
+      area.querySelectorAll('img[src]').forEach(function (im) {
+        var m = /\/f\/(\d+)\/inline/.exec(im.getAttribute('src') || '');
+        if (m) { used[m[1]] = 1; }
+      });
+      form.querySelectorAll('input[data-rte-att]').forEach(function (h) {
+        if (!used[h.value]) { h.remove(); }
+      });
+    }
+
+    function insertImage(src, alt) {
+      area.focus();
+      if (!putRange()) { caretToEnd(); }
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount) { return; }
+      var r = sel.getRangeAt(0);
+      var img = document.createElement('img');
+      img.src = src;
+      img.alt = alt || '';
+      r.deleteContents();
+      r.insertNode(img);
+      // 图后面补一个空段落：不然紧接着打的字会挤在图片同一行里，很难接着编辑
+      var p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      if (img.nextSibling) { img.parentNode.insertBefore(p, img.nextSibling); }
+      else { img.parentNode.appendChild(p); }
+      var nr = document.createRange();
+      nr.setStart(p, 0);
+      nr.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(nr);
+      grabRange();
+      sync();
+    }
+
+    function uploadImage(file) {
+      if (file.size > MAXIMG * 1024 * 1024) {
+        noteUp('图片超过 ' + MAXIMG + ' MB：' + (file.name || '这张图'), true);
+        return;
+      }
+      var fd = new FormData();
+      fd.append('file', file);
+      fd.append('board_id', boardId);
+      fd.append('attachable_type', 'draft');
+      fd.append('attachable_id', '0');
+      fd.append('kind', 'image');
+      var xhr = new XMLHttpRequest();
+      pendingImgs++;
+      uploading++;
+      noteUp('图片上传中…');
+      xhr.open('POST', UPLOAD_URL, true);
+      xhr.setRequestHeader('X-CSRF-Token', CSRF);
+      xhr.onload = function () {
+        pendingImgs--;
+        uploading--;
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+        if (xhr.status === 200 && data && data.ok && data.preview) {
+          insertImage(data.preview, data.name);
+          addHiddenAtt(data.id);
+          syncAttachIds();
+          noteUp('已插入 ' + (data.name || '图片'));
+          clearUpLater(2500);
+        } else {
+          noteUp((data && data.error) || '图片上传失败，请重试', true);
+        }
+      };
+      xhr.onerror = function () {
+        pendingImgs--;
+        uploading--;
+        noteUp('网络中断，图片没传上去', true);
+      };
+      xhr.send(fd);
+    }
+
+    function handleFiles(files) {
+      Array.prototype.forEach.call(files || [], function (f) {
+        if (!/^image\//i.test(f.type || '')) {
+          noteUp('只能插入图片文件（' + (f.name || '这个文件') + '）', true);
+          return;
+        }
+        uploadImage(f);
+      });
+    }
+
+    if (imgBtn && imgInput) {
+      imgBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      imgBtn.addEventListener('click', function () {
+        grabRange();                 // 先记住光标，选完文件回来还要插在原来位置
+        imgInput.click();
+      });
+      imgInput.addEventListener('change', function () {
+        handleFiles(imgInput.files);
+        imgInput.value = '';
+      });
+    }
+
     // ---- 粘贴 ----
-    // 一律按纯文本收：从 Word / 网页粘过来的东西带着大量样式和隐藏标签，
-    // 服务端反正会剥掉，与其粘完变形不如直接给干净的文字。
+    // 剪贴板里带图片（截图、复制来的图）就走上传；否则一律按纯文本收 ——
+    // 从 Word / 网页粘过来的东西带着大量样式和隐藏标签，服务端反正会剥掉，
+    // 与其粘完变形，不如直接给干净的文字。
     area.addEventListener('paste', function (e) {
       var dt = e.clipboardData || window.clipboardData;
       if (!dt) { return; }
-      var text = dt.getData('text/plain') || '';
+      var files = [];
+      if (dt.items && dt.items.length) {
+        for (var i = 0; i < dt.items.length; i++) {
+          var it = dt.items[i];
+          if (it.kind === 'file' && /^image\//i.test(it.type || '')) {
+            var f = it.getAsFile();
+            if (f) { files.push(f); }
+          }
+        }
+      }
       e.preventDefault();
+      if (files.length) {
+        grabRange();
+        handleFiles(files);
+        return;
+      }
+      var text = dt.getData('text/plain') || '';
       if (text) { insertAtCaret(text); }
       grabRange();
       sync();
     });
-    // 图片/文件拖进编辑区会插入 blob: 图片，正文里不该出现，直接挡掉
+
+    // 把图片拖进编辑区直接上传；非图片文件挡掉（要当附件请用下面的附件区）
     ['dragover', 'drop'].forEach(function (ev) {
-      area.addEventListener(ev, function (e) { e.preventDefault(); });
+      area.addEventListener(ev, function (e) {
+        e.preventDefault();
+        if (ev === 'drop' && e.dataTransfer && e.dataTransfer.files.length) {
+          grabRange();
+          handleFiles(e.dataTransfer.files);
+        }
+      });
     });
 
     // ---- 工具栏高亮 ----

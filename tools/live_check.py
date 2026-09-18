@@ -278,9 +278,13 @@ _, _js = req("/static/js/app.js")
 check("initEditor" in _js and "data-rte-area" in _js, "app.js 已是带富文本编辑器的版本")
 check("data-emoji-toggle" in _js and "insertAtCaret" in _js, "app.js 里有表情插入逻辑")
 check("getData('text/plain')" in _js, "app.js 粘贴时按纯文本净化（不带进外部样式）")
+check("data-rte-img" in _js and "/inline" in _js,
+      "app.js 里有正文插图逻辑（选图 / 拖拽 / 粘贴 → 上传 → 插入站内图片）")
+check("image\\/" in _js, "app.js 只把图片文件当插图传，其它文件仍走附件区")
 _, _css = req("/static/css/app.css")
 check(".rte-area" in _css and ".emoji-grid" in _css, "app.css 带编辑器与表情面板样式")
 check(".body-text.rich" in _css and ".rich blockquote" in _css, "app.css 带富文本排版规则")
+check(".rich img" in _css, "app.css 约束了正文图片宽度（手机拍的大图不会撑破版式）")
 
 if bid:
     _, _np2 = req(f"/b/{bid}/new")
@@ -290,6 +294,10 @@ if bid:
     check('name="body_format"' in _np2, "发布页带正文格式标记字段")
     check('value="text" data-rte-format' in _np2,
           "默认格式是 text —— 浏览器没开 JS 时仍按纯文本存，老路径不受影响")
+    check("data-img" in _np2 and "data-rte-img" in _np2, "发布页有「图片」按钮与文件选择器")
+    _acc = re.search(r'accept="([^"]*)"', _np2)
+    check(bool(_acc) and "image/png" in _acc.group(1) and "svg" not in _acc.group(1),
+          "图片选择器只收位图（svg 插不进正文）", _acc.group(1) if _acc else "没找到 accept")
 
 # 找一个有正文的老话题，确认纯文本渲染一点没变（升级前怎么显示，现在还怎么显示）
 _legacy = None
@@ -321,6 +329,7 @@ if _legacy:
         check("data-emoji-pop" in _rb, "评论区有表情入口")
         check(_rb.count('class="emoji-btn"') >= 60,
               f"评论区表情面板数量充足（{_rb.count('class=\"emoji-btn\"')} 个）")
+        check("data-img" in _rb and "data-rte-img" in _rb, "评论区也能插图（与正文同一个编辑器组件）")
 
 # ---------- 5.8 列表里的发布时间（只读） ----------
 # 需求：「课题列表里增加课题发布的时间显示」。

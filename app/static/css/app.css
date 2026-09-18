@@ -373,6 +373,9 @@ p{margin:0 0 8px}
 .rich div{margin:0}
 .rich strong,.rich b{font-weight:600}
 .rich mark{background:var(--warn-l);color:inherit;padding:0 2px;border-radius:3px}
+/* 正文图片：宽度自适应，永远不撑破版式（老师经常传的是手机拍的横图，很宽）。
+   编辑区与展示区共用这条，所以编辑时看到的裁切效果 = 发出来的效果。 */
+.rich img{max-width:100%;height:auto;border-radius:var(--r-sm);vertical-align:bottom}
 
 /* ---------------- 富文本编辑器 ---------------- */
 .rte{position:relative}
@@ -402,6 +405,9 @@ p{margin:0 0 8px}
 .rte-area:focus{outline:none;border-color:var(--brand)}
 .rte-area.is-empty::before{content:attr(data-ph);color:var(--faint);display:block}
 .rte-hint{font-size:12px;color:var(--faint);margin-top:5px}
+/* 插图进度/报错提示：占位与 hint 同高，不跳动 */
+.rte-up{font-size:12px;color:var(--brand);margin-top:5px}
+.rte-up.err{color:var(--danger)}
 .emoji-pop{
   position:absolute;top:37px;right:0;z-index:30;width:300px;max-width:90vw;
   background:var(--card);border:1px solid var(--line2);border-radius:var(--r);padding:8px 9px 9px;

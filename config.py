@@ -38,6 +38,13 @@ BANNED_EXT = {
 # 可直接在页内预览的扩展名
 INLINE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "pdf", "txt", "md", "log", "csv"}
 
+# 能插进正文当图片的扩展名。**故意不含 svg** ——
+# svg 里可以内嵌脚本，作为附件预览时另有 CSP sandbox 兜底，但正文插图这条路直接不放行。
+IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+# 正文插图的单张上限（MB）。比附件小得多 —— 图片是直接铺在页面里的，
+# 一张 20 MB 的原图会把别人的手机流量和渲染都拖垮。
+IMAGE_MAX_MB = int(os.environ.get("BBS_IMAGE_MAX_MB", "5"))
+
 PER_PAGE = 20
 TIMEZONE_OFFSET_HOURS = 8          # Asia/Shanghai
 
@@ -122,7 +129,7 @@ KIND_CODE_RE = r"[a-z][a-z0-9_]{1,23}"   # 自定义标识的格式
 #  格式由表单里的隐藏字段 body_format 决定，只有编辑器 JS 会把它设成 html。
 # ============================================================
 BODY_MAX_CHARS = int(os.environ.get("BBS_BODY_MAX_CHARS", "20000"))
-RICH_PLACEHOLDER_HINT = "可加粗、列条目、引用、放代码；粘贴进来会按纯文本处理"
+RICH_PLACEHOLDER_HINT = "可加粗、列条目、引用、放代码、插入图片；粘贴进来会按纯文本处理"
 
 # 评论/正文可以选的表情。挑的是教研场景里常用的一批，
 # 不做全量 Unicode 面板（几千个反而找不到）。想加直接往这里加。

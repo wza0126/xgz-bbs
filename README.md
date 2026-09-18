@@ -41,7 +41,10 @@ Windows 上直接双击 `启动.bat` 也行。
 - 话题：讨论 / 公告 / 任务三种类型，置顶、加精、关闭、编辑删除
 - **富文本正文**：加粗 / 斜体 / 下划线 / 删除线、项目符号与编号列表、引用、代码块、链接。
   粘贴进来的内容一律按纯文本收（从 Word、网页复制不会带进一堆乱样式）
-- 回复：楼层式，支持楼中楼；`@姓名` 会触发通知；发帖与回复都能点「表情」插入表情
+- **正文插图**：点「图片」选文件，也可以直接拖进编辑区或粘贴截图。图片走附件体系，
+  跟着话题走（权限、删除、打包导出都自动跟上），宽度自适应不会撑破版式
+- 回复：楼层式，支持楼中楼；`@姓名` 会触发通知；发帖与回复都能点「表情」插入表情，
+  也能插图
 - 话题类型标签由管理员在后台自助增删（改名字 / 换颜色 / 调顺序 / 停用 / 删除）
 - **列表带时间**：广场的课题组卡片显示「建于 年-月-日」，课题组页每行话题显示
   「谁 发布于 …」（近期显示「3 天前」这类相对时间，鼠标悬停可看精确到分钟的时刻）
@@ -86,7 +89,7 @@ xgz-bbs/
 │  ├─ views/            8 个蓝图：auth boards topics tasks files notify search admin
 │  ├─ templates/        Jinja2 模板
 │  └─ static/           app.css + app.js
-├─ tools/               演示数据 / 冒烟测试 / 线上安全验收 / 备份 / 数据盘点 / 重置密码 / 换行符检查
+├─ tools/               演示数据 / 冒烟测试 / 线上安全验收 / 备份 / 数据盘点 / 重置密码 / 换行符检查 / 草稿清理
 ├─ deploy/              群晖 NAS 部署脚本
 └─ docs/                设计方案 · 部署说明 · UI 原型
 ```
@@ -105,11 +108,16 @@ xgz-bbs/
 5. **权限收口在两个装饰器**：`@login_required`、`@board_role_required('leader')`，
    视图里不写 if 判断。
 6. **富文本用白名单清洗，库里当成不可信来源**：入库前洗一次、渲染时再洗一次
-   （`app/richtext.py`）。只放行 `p/br/strong/em/u/s/ul/ol/li/blockquote/code/pre/a` 等少量标签，
-   属性只留 `<a>` 的 href；`href` 只认 http/https/mailto/tel 与相对路径，
-   `javascript:`、`onerror`、`style` 一律丢弃，`<script>/<iframe>` 连内容一起丢。
+   （`app/richtext.py`）。只放行 `p/br/strong/em/u/s/ul/ol/li/blockquote/code/pre/a/img` 等少量标签，
+   属性只留 `<a>` 的 href 与 `<img>` 的 src/alt/尺寸；`href` 只认 http/https/mailto/tel
+   与相对路径，`javascript:`、`onerror`、`style` 一律丢弃，`<script>/<iframe>` 连内容一起丢。
    正文按行记格式（`body_format` = `text` / `html`），老帖保持纯文本渲染，一行数据不动。
-7. 另有轻量 CSRF 校验、密码 pbkdf2 加盐哈希、附件扩展名黑名单。
+7. **正文图片只认本站附件**：`<img src>` 必须严格是 `/f/<数字>/inline`，外链图一律丢弃。
+   插图复用附件体系 —— 先传成 draft 附件，提交时认领到话题/回复上，
+   所以图片的可见性、生命周期、打包导出全都跟正文绑在一起（`app/views/files.py`）。
+   正文里引用的附件 id 由前端隐藏字段 + 服务端扫正文两路合并，认领 SQL 限定
+   本人 + draft 状态，伪造别人的附件 id 也认领不走。上传图片只收位图，svg 不收。
+8. 另有轻量 CSRF 校验、密码 pbkdf2 加盐哈希、附件扩展名黑名单。
 
 ---
 
@@ -126,7 +134,7 @@ xgz-bbs/
 ```bash
 # 本地 / 演示环境（会写数据，先复位）
 python tools/seed_demo.py --reset
-python tools/smoke_test.py                              # 全站冒烟 364 项，需先启动服务
+python tools/smoke_test.py                              # 全站冒烟 408 项，需先启动服务
 
 # 线上（已有真实数据）——只读 + 隔离账号，绝不碰真实内容
 BBS_SMOKE_BASE=http://192.168.10.201:8009 BBS_ADMIN_PASSWORD=<admin密码> \
@@ -137,6 +145,7 @@ python tools/backup_db.py --keep 30    # 安全备份（VACUUM INTO）并回读�
 python tools/inspect_data.py           # 只读盘点：数据量 + 各账号内容足迹
 python tools/check_eol.py              # 检查 deploy/*.sh 是不是 LF 换行
 python tools/reset_admin.py --list
+python tools/cleanup_drafts.py         # 清理过期草稿附件（默认干跑，加 --apply 才删）
 ```
 
 > ⚠️ **线上有真实数据之后，不要再跑 `smoke_test.py`。** 它会确认/打回真实的提交、
