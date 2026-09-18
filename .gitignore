@@ -8,6 +8,9 @@ __pycache__/
 _probe.txt
 _livetest.html
 _verify_*.py
+# 本地调试产物（抓站快照、无头浏览器截图）——只在仓库根目录匹配，别误伤 app/templates/_macros.html
+/_*.html
+/_*.png
 
 # 编辑器
 .vscode/

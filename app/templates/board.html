@@ -32,13 +32,11 @@
 
   <div class="row bar top-gap">
     <form class="row gap8" method="get" action="{{ url_for('boards.detail', board_id=board.id) }}">
-      <div class="seg">
+      <div class="seg seg-wrap">
         <a class="seg-item {{ 'on' if not kind }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='') }}">全部</a>
-        <a class="seg-item {{ 'on' if kind == 'task' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='task') }}">任务</a>
-        <a class="seg-item {{ 'on' if kind == 'discussion' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='discussion') }}">讨论</a>
-        <a class="seg-item {{ 'on' if kind == 'notice' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='notice') }}">公告</a>
-        <a class="seg-item {{ 'on' if kind == 'training' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='training') }}">培训</a>
-        <a class="seg-item {{ 'on' if kind == 'achievement' }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind='achievement') }}">成果</a>
+        {% for k in TOPIC_KIND_ORDER %}
+        <a class="seg-item {{ 'on' if kind == k }}" href="{{ url_for('boards.detail', board_id=board.id, sort=sort, kind=k) }}">{{ TOPIC_KIND[k] }}</a>
+        {% endfor %}
       </div>
       <input type="hidden" name="kind" value="{{ kind or '' }}">
       <select name="sort" onchange="this.form.submit()" class="select">

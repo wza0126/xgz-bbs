@@ -50,8 +50,34 @@ TASK_STATUS = {
     "rejected": "已打回",
 }
 
-TOPIC_KIND = {"discussion": "讨论", "notice": "公告", "task": "任务",
-              "training": "培训", "achievement": "成果"}
+# 话题类型。键即 topics.kind 存库值，值即界面显示的中文名。
+# 新增类型时只需改这里一处（外加 app.css 里加一条 .t-<kind> 配色），
+# 标签栏、发帖类型选择、kind 白名单都从这里派生。
+TOPIC_KIND = {
+    "discussion": "讨论",
+    "plan": "方案",
+    "record": "记录",
+    "work": "作品",
+    "achievement": "成果",
+    "training": "培训",
+    "resource": "资源",
+    "notice": "公告",
+    "task": "任务",
+}
+
+# 课题组页标签栏的排列顺序（「全部」由模板补在最前）
+TOPIC_KIND_ORDER = ["task", "discussion", "notice", "training", "achievement",
+                    "plan", "record", "work", "resource"]
+
+# 仅组长可发布的类型；其余类型组员也能发
+LEADER_ONLY_KINDS = ("notice", "task")
+
+# 可置顶的类型
+PINNABLE_KINDS = ("notice", "task")
+
+# 组员可发布的类型名（按标签栏顺序）——发帖页提示文案直接用，别再手写一遍
+TOPIC_KIND_FREE_LABELS = [TOPIC_KIND[k] for k in TOPIC_KIND_ORDER
+                          if k not in LEADER_ONLY_KINDS]
 
 
 def load_secret_key() -> str:

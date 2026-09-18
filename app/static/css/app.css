@@ -10,6 +10,10 @@
   --warn:#BA7517; --warn-l:#FAEEDA; --warn-d:#854F0B;
   --danger:#E24B4A; --danger-l:#FCEBEB; --danger-d:#A32D2D;
   --purple:#534AB7; --purple-l:#EEEDFE;
+  --teal:#0F766E; --teal-l:#DCF2F0;
+  --rose:#A8325E; --rose-l:#FBE7EF;
+  --orange:#C2410C; --orange-l:#FDEADC;
+  --slate:#334155; --slate-l:#E7ECF2;
   --r:12px; --r-sm:8px;
   --shadow:none;
 }
@@ -131,6 +135,10 @@ p{margin:0 0 8px}
 .t-disc{background:var(--soft);color:var(--muted)}
 .t-training{background:var(--ok-l);color:var(--ok-d)}
 .t-achievement{background:var(--purple-l);color:#3C3489}
+.t-plan{background:var(--teal-l);color:var(--teal)}
+.t-record{background:var(--rose-l);color:var(--rose)}
+.t-work{background:var(--orange-l);color:var(--orange)}
+.t-resource{background:var(--slate-l);color:var(--slate)}
 .t-grp{background:var(--purple-l);color:#3C3489}
 .t-pin{background:var(--danger-l);color:var(--danger-d)}
 .t-featured{background:var(--warn-l);color:var(--warn-d)}
@@ -159,6 +167,13 @@ p{margin:0 0 8px}
 .seg-item:last-child{border-right:0}
 .seg-item:hover{background:var(--soft);color:var(--ink);text-decoration:none}
 .seg-item.on{background:var(--brand-l);color:var(--brand-d);font-weight:500}
+/* 类型标签多的场景（课题组页、发帖页）：改成可换行的胶囊，10 个也不会挤成一条 */
+.seg-wrap{display:flex;flex-wrap:wrap;gap:6px;border:0;background:transparent;overflow:visible}
+.seg-wrap .seg-item{
+  border:1px solid var(--line);border-radius:999px;background:var(--card);
+  padding:5px 12px;font-size:13px;
+}
+.seg-wrap .seg-item.on{border-color:var(--brand-l);background:var(--brand-l);color:var(--brand-d)}
 
 /* ---------------- 指标卡 ---------------- */
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}

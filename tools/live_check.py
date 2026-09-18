@@ -191,28 +191,46 @@ if victim:
     _, h = req(f"/admin/users/{victim['id']}/delete", {"_csrf": csrf(h)})
     check("名下还有" in flash_of(h), "拒绝删除有内容的账号（商瑜，回复 5 条）", flash_of(h))
 
-# ---------- 5.5 话题类型：培训 / 成果 已上线（只读） ----------
+# ---------- 5.5 话题类型：标签栏 / 筛选 / 发帖选项齐全（只读，清单来自 config） ----------
+import config as _cfg
+
 _, home = req("/")
 bids = sorted({int(x) for x in re.findall(r"/b/(\d+)", home)})
 bid = None
 for b in bids:
     _, bp = req(f"/b/{b}")
-    if "kind=training" in bp:
+    if "kind=task" in bp:
         bid = b
         break
-check(bid is not None, "找到含「培训」筛选的课题组页")
+check(bid is not None, "找到一个能列话题的课题组页")
 if bid:
     _, bp = req(f"/b/{bid}")
-    check("培训" in bp and "成果" in bp, f"课题组 #{bid} 标签栏有「培训 / 成果」")
-    check("kind=training" in bp, "有 kind=training 筛选链接")
-    check("kind=achievement" in bp, "有 kind=achievement 筛选链接")
-    _, t1 = req(f"/b/{bid}?kind=training")
-    check(len(t1) > 200, "kind=training 筛选页可打开")
-    _, t2 = req(f"/b/{bid}?kind=achievement")
-    check(len(t2) > 200, "kind=achievement 筛选页可打开")
+    missing = [lb for k, lb in _cfg.TOPIC_KIND.items() if f">{lb}</a>" not in bp]
+    check(not missing, f"课题组 #{bid} 标签栏类型齐全（{len(_cfg.TOPIC_KIND)} 种）",
+          f"缺：{'、'.join(missing)}" if missing else "")
+    for k in _cfg.TOPIC_KIND_ORDER:
+        check(f"kind={k}" in bp, f"有 kind={k} 筛选链接（{_cfg.TOPIC_KIND[k]}）")
+    for k in _cfg.TOPIC_KIND_ORDER:
+        _, tp = req(f"/b/{bid}?kind={k}")
+        check(len(tp) > 200, f"kind={k} 筛选页可打开（{_cfg.TOPIC_KIND[k]}）")
     _, np = req(f"/b/{bid}/new")
-    check('value="training"' in np, "发帖页有「培训」选项")
-    check('value="achievement"' in np, "发帖页有「成果」选项")
+    free_lack = [lb for k, lb in _cfg.TOPIC_KIND.items()
+                 if k not in _cfg.LEADER_ONLY_KINDS and f'value="{k}"' not in np]
+    check(not free_lack, "发帖页类型选项齐全（全员可发类型）",
+          f"缺：{'、'.join(free_lack)}" if free_lack else "")
+    # 登录账号不一定是这个组的组长，任务/公告选项按视角判断，别误报
+    if 'id="taskFields"' in np:
+        lead_lack = [lb for k, lb in _cfg.TOPIC_KIND.items()
+                     if k in _cfg.LEADER_ONLY_KINDS and f'value="{k}"' not in np]
+        check(not lead_lack, "发帖页含组长专属类型（任务 / 公告）",
+              f"缺：{'、'.join(lead_lack)}" if lead_lack else "")
+    else:
+        LINES.append(f"… 当前账号在课题组 #{bid} 不是组长，跳过任务/公告选项检查")
+    check("data-uploader" in np, "发帖页自带附件上传区（所有类型通用）")
+    # 提示语由 config 派生（组员那句会列出可发类型），确认渲染出来了、没漏变量
+    _hm = re.search(r'class="hint">\s*(.*?)\s*</span>', np, re.S)
+    _hint = re.sub(r"\s+", " ", _hm.group(1)) if _hm else ""
+    check(_hint and "undefined" not in _hint, "发帖页类型提示语正常渲染", _hint[:80])
 
 # ---------- 5.6 任务说明不与正文重复（只读） ----------
 # 「任务即话题」：正文与任务说明同源，同源时页面上只应出现一次（展示在任务卡里）。

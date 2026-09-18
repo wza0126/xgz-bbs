@@ -192,8 +192,7 @@ pages = [
     (f"/b/{B1}?kind=task", 200, "课题组 1·任务筛选"),
     (f"/b/{B1}?sort=new", 200, "课题组 1·按时间"),
     (f"/b/{B1}?kind=discussion&sort=hot", 200, "课题组 1·讨论最热"),
-    (f"/b/{B1}?kind=training", 200, "课题组 1·培训筛选"),
-    (f"/b/{B1}?kind=achievement", 200, "课题组 1·成果筛选"),
+    # 其余类型的筛选页在下面按 config.TOPIC_KIND_ORDER 自动补全，加类型后不用改这里
     (f"/b/{B1}/files", 200, "课题组 1·文件库"),
     (f"/b/{B1}/settings", 200, "课题组 1·组设置"),
     (f"/b/{B1}/new", 200, "发帖页"),
@@ -219,6 +218,89 @@ pages = [
 ]
 for path, exp, label in pages:
     get(path, exp, label)
+
+# ---------- 4.5 话题类型：标签栏 / 筛选 / 发帖选项（清单来自 config，加类型后自动覆盖） ----------
+import config as _cfg
+
+
+def assert_true(cond, label, detail=""):
+    if cond:
+        ok.append((label, 200))
+    else:
+        bad.append((label, 0, detail))
+
+
+_code, _bp = get(f"/b/{B1}", 200)
+for _k in _cfg.TOPIC_KIND_ORDER:
+    _lb = _cfg.TOPIC_KIND[_k]
+    get(f"/b/{B1}?kind={_k}", 200, f"课题组 1·{_lb}筛选")
+    assert_true(f"kind={_k}" in _bp, f"课题组页标签栏有「{_lb}」", _k)
+    assert_true(f">{_lb}</a>" in _bp, f"课题组页有「{_lb}」链接文字", _lb)
+
+_code, _np = get(f"/b/{B1}/new", 200)
+for _k, _lb in _cfg.TOPIC_KIND.items():
+    assert_true(f'value="{_k}"' in _np, f"发帖页有「{_lb}」选项", _k)
+assert_true("data-uploader" in _np, "发帖页自带附件上传区（与类型无关）")
+
+# ---------- 4.6 每种类型都能真的传上附件（发帖 -> 上传 -> 认领 -> 附件挂在话题上） ----------
+import json as _json
+
+
+def upload_file(board_id, filename, content, token):
+    """按前端的 multipart 约定往 /upload 传一个文件，返回 (状态码, json)。"""
+    if not token:
+        # 页面没加载出来（服务没起 / 被踢回登录页）时别抛异常，让用例如实报失败
+        return 0, {"raw": "没拿到 csrf token，发帖页可能没打开"}
+    bd = "----smoke7788boundary"
+    buf = []
+    for k, v in (("board_id", str(board_id)), ("attachable_type", "draft"), ("attachable_id", "0")):
+        buf.append(f'--{bd}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    buf.append(f'--{bd}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+               f'Content-Type: text/plain\r\n\r\n'.encode() + content + b"\r\n")
+    buf.append(f"--{bd}--\r\n".encode())
+    rq = urllib.request.Request(BASE + "/upload", data=b"".join(buf), method="POST")
+    rq.add_header("Content-Type", f"multipart/form-data; boundary={bd}")
+    rq.add_header("X-CSRF-Token", token)
+    try:
+        with opener.open(rq, timeout=30) as r:
+            return r.status, _json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        return e.code, {"raw": e.read().decode("utf-8", "replace")[:200]}
+
+
+for _k in ("plan", "record", "work", "resource"):
+    _lb = _cfg.TOPIC_KIND[_k]
+    _ttl = f"冒烟测试·{_lb}（可删）"
+    _, _h = get(f"/b/{B1}/new", 200)
+    _tok = csrf_from(_h)
+    _ust, _ures = upload_file(B1, f"smoke-{_k}.txt", f"{_k} 附件内容".encode(), _tok)
+    if _ust != 200 or not _ures.get("ok"):
+        bad.append((f"「{_lb}」上传附件", _ust, str(_ures)[:200]))
+        continue
+    _aid = _ures["id"]
+    post(f"/b/{B1}/new", {"_csrf": _tok, "kind": _k, "title": _ttl,
+                          "body": f"冒烟测试：验证「{_lb}」能发布且能挂附件。",
+                          "attach_ids": [str(_aid)]},
+         200, f"发布「{_lb}」话题并带附件")
+
+    _c = _con()
+    _row = _c.execute("SELECT t.id, t.kind FROM topics t WHERE t.title = ? ORDER BY t.id DESC LIMIT 1",
+                      (_ttl,)).fetchone()
+    _att = _c.execute("SELECT attachable_type, attachable_id, board_id FROM attachments WHERE id = ?",
+                      (_aid,)).fetchone()
+    _c.close()
+    if _row is None:
+        bad.append((f"「{_lb}」话题没建出来", 0, _ttl))
+        continue
+    assert_true(_row["kind"] == _k, f"「{_lb}」入库 kind 正确", _row["kind"])
+    assert_true(_att is not None and _att["attachable_type"] == "topic"
+                and _att["attachable_id"] == _row["id"],
+                f"「{_lb}」附件已认领到该话题", str(dict(_att) if _att else None))
+    _dcode, _dh = get(f"/t/{_row['id']}", 200)
+    assert_true(f"smoke-{_k}.txt" in _dh, f"「{_lb}」详情页能看到附件", f"smoke-{_k}.txt")
+    assert_true("data-uploader" in _dh, f"「{_lb}」详情页可继续传附件")
+
+print()
 
 # ---------- 5. 权限：张老师不是课题组 2 的成员 ----------
 get(f"/b/{B2}", 403, "非成员访问课题组 2 → 403")
@@ -412,6 +494,49 @@ else:
         ok.append(("改登录账号时重名被拒", 200))
     else:
         bad.append(("重名的登录账号没拦住", 0, flashes(html)[:200]))
+
+# ---------- 11. 组员视角：只看得到能发的类型，任务/公告被拒 ----------
+post("/logout", {"_csrf": csrf_from(get("/me", 200)[1])}, 200, "退出登录")
+_, _lg = get("/login", 200)
+post("/login", {"_csrf": csrf_from(_lg), "username": "wuls", "password": "123456", "next": ""},
+     200, "登录 吴老师（组员）")
+
+_, _mh = get(f"/b/{B1}/new", 200)
+assert_true('id="taskFields"' not in _mh, "组员发帖页没有组长专属字段")
+for _k, _lb in _cfg.TOPIC_KIND.items():
+    if _k in _cfg.LEADER_ONLY_KINDS:
+        assert_true(f'value="{_k}"' not in _mh, f"组员发帖页看不到「{_lb}」", _k)
+    else:
+        assert_true(f'value="{_k}"' in _mh, f"组员发帖页有「{_lb}」", _k)
+_hm = re.search(r'class="hint">\s*(.*?)\s*</span>', _mh, re.S)
+_hint = re.sub(r"\s+", " ", _hm.group(1)) if _hm else ""
+assert_true(_hint and "undefined" not in _hint, "组员提示语正常渲染（自动列出可发类型）", _hint[:120])
+assert_true(all(lb in _hint for lb in _cfg.TOPIC_KIND_FREE_LABELS),
+            "组员提示语列全了可发类型", _hint[:120])
+
+# 越权发任务/公告要被服务端拦住（前端藏了不算数）
+for _k in _cfg.LEADER_ONLY_KINDS:
+    post(f"/b/{B1}/new", {"_csrf": csrf_from(_mh), "kind": _k, "title": f"越权{_k}",
+                          "body": "x"}, 403, f"组员发「{_cfg.TOPIC_KIND[_k]}」→ 403")
+
+# 组员发新类型（方案）+ 传附件，应成功
+_, _mh = get(f"/b/{B1}/new", 200)
+_mtok = csrf_from(_mh)
+_ust, _ures = upload_file(B1, "smoke-member-plan.txt", "组员上传的附件".encode(), _mtok)
+assert_true(_ust == 200 and _ures.get("ok"), "组员在发帖页上传附件", str(_ures)[:120])
+if _ust == 200 and _ures.get("ok"):
+    post(f"/b/{B1}/new", {"_csrf": _mtok, "kind": "plan", "title": "冒烟测试·组员方案（可删）",
+                          "body": "组员发起的方案，带附件。", "attach_ids": [str(_ures["id"])]},
+         200, "组员发布「方案」并带附件")
+    _c = _con()
+    _rr = _c.execute("SELECT id FROM topics WHERE title = '冒烟测试·组员方案（可删）'"
+                     " ORDER BY id DESC LIMIT 1").fetchone()
+    _c.close()
+    if _rr:
+        _, _dh = get(f"/t/{_rr['id']}", 200)
+        assert_true("smoke-member-plan.txt" in _dh, "组员发的「方案」详情页能看到附件")
+    else:
+        bad.append(("组员发的方案没建出来", 0, ""))
 
 print("=" * 66)
 print(f"通过 {len(ok)} 项，失败 {len(bad)} 项")

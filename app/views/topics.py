@@ -2,6 +2,7 @@
 """话题：发布、详情、回复、置顶、关闭、编辑、删除。"""
 from flask import (Blueprint, abort, flash, g, redirect, render_template, request, url_for)
 
+import config as cfg
 from .. import auth as authm
 from .. import db as dbm
 from .. import models
@@ -24,14 +25,14 @@ def create(board_id):
 
     if request.method == "POST":
         kind = request.form.get("kind", "discussion")
-        if kind not in ("discussion", "notice", "task", "training", "achievement"):
+        if kind not in cfg.TOPIC_KIND:
             kind = "discussion"
-        if kind in ("notice", "task") and not is_leader:
+        if kind in cfg.LEADER_ONLY_KINDS and not is_leader:
             abort(403)
 
         title = (request.form.get("title") or "").strip()
         body = (request.form.get("body") or "").strip()
-        is_pinned = 1 if (request.form.get("is_pinned") and kind in ("notice", "task")) else 0
+        is_pinned = 1 if (request.form.get("is_pinned") and kind in cfg.PINNABLE_KINDS) else 0
 
         if len(title) < 2:
             flash("标题太短了，至少 2 个字", "error")

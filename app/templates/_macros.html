@@ -7,12 +7,11 @@
 <span class="av {{ cls }}" style="{{ avatar_style(name) }}">{{ avatar_char(name) }}</span>
 {%- endmacro %}
 
+{# 话题类型标签：色值类名与 kind 同名（discussion 例外，用 .t-disc）。
+   兜底给 t-disc，保证以后加了新 kind 但忘了配色时也不会显示成空白。 #}
 {% macro kind_tag(kind) -%}
-{%- if kind == 'task' -%}<span class="tag t-task">任务</span>
-{%- elif kind == 'notice' -%}<span class="tag t-notice">公告</span>
-{%- elif kind == 'training' -%}<span class="tag t-training">培训</span>
-{%- elif kind == 'achievement' -%}<span class="tag t-achievement">成果</span>
-{%- else -%}<span class="tag t-disc">讨论</span>{%- endif -%}
+{%- set cls = 't-disc' if kind == 'discussion' else 't-' ~ kind -%}
+<span class="tag {{ cls if kind in TOPIC_KIND else 't-disc' }}">{{ TOPIC_KIND.get(kind, kind) }}</span>
 {%- endmacro %}
 
 {% macro status_tag(status) -%}

@@ -15,28 +15,24 @@
 
     <div class="fld">
       <span>类型</span>
-      <div class="seg" id="kindSeg">
-        <label class="seg-item {{ 'on' if kind == 'discussion' }}">
-          <input type="radio" name="kind" value="discussion" {{ 'checked' if kind == 'discussion' }} hidden>讨论
+      <div class="seg seg-wrap" id="kindSeg">
+        {% for k in TOPIC_KIND_ORDER if k not in LEADER_ONLY_KINDS %}
+        <label class="seg-item {{ 'on' if kind == k }}">
+          <input type="radio" name="kind" value="{{ k }}" {{ 'checked' if kind == k }} hidden>{{ TOPIC_KIND[k] }}
         </label>
-        <label class="seg-item {{ 'on' if kind == 'training' }}">
-          <input type="radio" name="kind" value="training" {{ 'checked' if kind == 'training' }} hidden>培训
-        </label>
-        <label class="seg-item {{ 'on' if kind == 'achievement' }}">
-          <input type="radio" name="kind" value="achievement" {{ 'checked' if kind == 'achievement' }} hidden>成果
-        </label>
+        {% endfor %}
         {% if is_leader %}
-        <label class="seg-item {{ 'on' if kind == 'notice' }}">
-          <input type="radio" name="kind" value="notice" {{ 'checked' if kind == 'notice' }} hidden>公告
+        {% for k in TOPIC_KIND_ORDER if k in LEADER_ONLY_KINDS %}
+        <label class="seg-item {{ 'on' if kind == k }}">
+          <input type="radio" name="kind" value="{{ k }}" {{ 'checked' if kind == k }} hidden>{{ TOPIC_KIND[k] }}
         </label>
-        <label class="seg-item {{ 'on' if kind == 'task' }}">
-          <input type="radio" name="kind" value="task" {{ 'checked' if kind == 'task' }} hidden>任务
-        </label>
+        {% endfor %}
         {% endif %}
       </div>
       <span class="hint">
-        {% if is_leader %}任务会出现在组员的「我的任务」里并开始计时；公告会通知全组。培训、成果用于沉淀学习记录与课题成果。
-        {% else %}组员可以发起讨论、培训、成果；任务与公告由组长发布。{% endif %}
+        {% if is_leader %}任务会出现在组员的「我的任务」里并开始计时；公告会通知全组。
+        {% else %}组员可以发起 {{ TOPIC_KIND_FREE_LABELS | join('、') }}；任务与公告由组长发布。
+        {% endif %}每种类型都可以直接传附件。
       </span>
     </div>
 
