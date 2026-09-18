@@ -39,7 +39,10 @@ Windows 上直接双击 `启动.bat` 也行。
 - 账号：管理员建号 / 批量粘贴名单导入 / 改密 / 停用
 - 课题组：自建组、拉人入组、设组长、公开组或仅本组可见、归档
 - 话题：讨论 / 公告 / 任务三种类型，置顶、加精、关闭、编辑删除
-- 回复：楼层式，支持楼中楼；`@姓名` 会触发通知
+- **富文本正文**：加粗 / 斜体 / 下划线 / 删除线、项目符号与编号列表、引用、代码块、链接。
+  粘贴进来的内容一律按纯文本收（从 Word、网页复制不会带进一堆乱样式）
+- 回复：楼层式，支持楼中楼；`@姓名` 会触发通知；发帖与回复都能点「表情」插入表情
+- 话题类型标签由管理员在后台自助增删（改名字 / 换颜色 / 调顺序 / 停用 / 删除）
 - 任务：发任务时指派多人、设截止日期与满分；组员标记开始、提交文字 + 附件；
   组长逐人「确认通过（可打分）」或「打回（必填原因）」；打回后组员可重新提交
 - 附件：拖拽上传、进度条、页内预览图片/PDF、按课题组隔离下载权限
@@ -71,10 +74,12 @@ xgz-bbs/
 ├─ config.py            端口、上传上限、路径等集中配置
 ├─ app/
 │  ├─ __init__.py       应用工厂 create_app()
-│  ├─ schema.sql        全部建表语句（11 张表）
-│  ├─ db.py             SQLite 连接 + 查询糖
+│  ├─ schema.sql        全部建表语句（12 张表）
+│  ├─ db.py             SQLite 连接 + 查询糖 + 轻量加字段迁移
 │  ├─ models.py         共用查询
 │  ├─ auth.py           密码哈希 + 权限装饰器
+│  ├─ kinds.py          话题类型标签的唯一访问层（清单在库里）
+│  ├─ richtext.py       富文本白名单清洗 / 纯文本提取 / 摘要
 │  ├─ utils.py          附件落盘、时区、打包导出
 │  ├─ views/            8 个蓝图：auth boards topics tasks files notify search admin
 │  ├─ templates/        Jinja2 模板
@@ -97,7 +102,12 @@ xgz-bbs/
 4. **附件一律 uuid 落盘**，原始文件名只存数据库 —— 防路径穿越、防中文乱码。
 5. **权限收口在两个装饰器**：`@login_required`、`@board_role_required('leader')`，
    视图里不写 if 判断。
-6. 另有轻量 CSRF 校验、密码 pbkdf2 加盐哈希、附件扩展名黑名单。
+6. **富文本用白名单清洗，库里当成不可信来源**：入库前洗一次、渲染时再洗一次
+   （`app/richtext.py`）。只放行 `p/br/strong/em/u/s/ul/ol/li/blockquote/code/pre/a` 等少量标签，
+   属性只留 `<a>` 的 href；`href` 只认 http/https/mailto/tel 与相对路径，
+   `javascript:`、`onerror`、`style` 一律丢弃，`<script>/<iframe>` 连内容一起丢。
+   正文按行记格式（`body_format` = `text` / `html`），老帖保持纯文本渲染，一行数据不动。
+7. 另有轻量 CSRF 校验、密码 pbkdf2 加盐哈希、附件扩展名黑名单。
 
 ---
 
@@ -114,7 +124,7 @@ xgz-bbs/
 ```bash
 # 本地 / 演示环境（会写数据，先复位）
 python tools/seed_demo.py --reset
-python tools/smoke_test.py                              # 全站冒烟 82 项，需先启动服务
+python tools/smoke_test.py                              # 全站冒烟 355 项，需先启动服务
 
 # 线上（已有真实数据）——只读 + 隔离账号，绝不碰真实内容
 BBS_SMOKE_BASE=http://192.168.10.201:8009 BBS_ADMIN_PASSWORD=<admin密码> \

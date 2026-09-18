@@ -10,6 +10,7 @@ import config as cfg
 from . import auth as authm
 from . import db as dbm
 from . import kinds as kindsm
+from . import richtext
 from . import utils
 
 
@@ -94,6 +95,11 @@ def create_app():
         BUILTIN_KINDS=cfg.BUILTIN_KIND_CODES,
         UNDISABLABLE_KINDS=cfg.UNDISABLABLE_KIND_CODES,
         MAX_UPLOAD_MB=cfg.MAX_UPLOAD_MB,
+        BODY_MAX_CHARS=cfg.BODY_MAX_CHARS,
+        EMOJI=cfg.EMOJI,
+        RICH_HINT=cfg.RICH_PLACEHOLDER_HINT,
+        rich_body=richtext.rich_body,
+        to_plain=richtext.to_plain,
         fmt_dt=utils.fmt_dt,
         fmt_day=utils.fmt_day,
         rel_time=utils.rel_time,
@@ -108,6 +114,7 @@ def create_app():
     app.jinja_env.filters["day"] = utils.fmt_day
     app.jinja_env.filters["rel"] = utils.rel_time
     app.jinja_env.filters["size"] = utils.human_size
+    app.jinja_env.filters["excerpt"] = richtext.excerpt
 
     @app.context_processor
     def _inject():

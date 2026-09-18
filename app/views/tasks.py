@@ -2,9 +2,11 @@
 """任务：开始做、提交、组长审核打分、指派调整、我的任务。"""
 from flask import (Blueprint, abort, flash, redirect, render_template, request, url_for)
 
+import config as cfg
 from .. import auth as authm
 from .. import db as dbm
 from .. import models
+from .. import richtext
 from .. import utils
 from .files import claim_attachments, form_attach_ids
 
@@ -58,7 +60,11 @@ def submit(topic_id):
         flash("这个任务已经关闭", "error")
         return redirect(url_for("topics.detail", topic_id=topic_id) + "#task")
 
-    body = (request.form.get("body") or "").strip()
+    try:
+        body, body_fmt = richtext.parse_body(request.form, max_chars=cfg.BODY_MAX_CHARS)
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("topics.detail", topic_id=topic_id) + "#task")
     att_ids = form_attach_ids(request)
     if not body and not att_ids and not a["submission_post_id"]:
         flash("写点说明或者传个附件再提交", "error")
@@ -76,14 +82,15 @@ def submit(topic_id):
     if post_id is None:
         floor = (dbm.scalar("SELECT MAX(floor_no) FROM posts WHERE topic_id = ?", (topic_id,), 0) or 0) + 1
         post_id = dbm.execute(
-            "INSERT INTO posts (topic_id, author_id, parent_id, floor_no, body, created_at, updated_at)"
-            " VALUES (?,?,NULL,?,?,?,?)",
-            (topic_id, user["id"], floor, body, ts, ts))
+            "INSERT INTO posts (topic_id, author_id, parent_id, floor_no, body, body_format,"
+            " created_at, updated_at) VALUES (?,?,NULL,?,?,?,?,?)",
+            (topic_id, user["id"], floor, body, body_fmt, ts, ts))
         dbm.execute("UPDATE topics SET reply_count = reply_count + 1, last_reply_at = ?,"
                     " last_reply_uid = ?, updated_at = ? WHERE id = ?",
                     (ts, user["id"], ts, topic_id))
     else:
-        dbm.execute("UPDATE posts SET body = ?, updated_at = ? WHERE id = ?", (body, ts, post_id))
+        dbm.execute("UPDATE posts SET body = ?, body_format = ?, updated_at = ? WHERE id = ?",
+                    (body, body_fmt, ts, post_id))
 
     claim_attachments(att_ids, user_id=user["id"], attachable_type="post",
                       attachable_id=post_id, board_id=topic["board_id"])

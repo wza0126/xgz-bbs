@@ -47,7 +47,7 @@
           <div class="main">
             <div class="ttl"><a href="{{ url_for('topics.detail', topic_id=p.topic_id) }}#p{{ p.id }}">{{ p.topic_title }}</a></div>
             <div class="tmeta"><span>{{ p.board_name }}</span><span>{{ p.author_name }} · {{ p.floor_no }} 楼</span><span>{{ p.created_at | dt }}</span></div>
-            <div class="snippet">{{ p.body[:200] }}{{ '…' if p.body | length > 200 }}</div>
+            <div class="snippet">{{ p.body | excerpt(p.body_format, 200) }}</div>
           </div>
         </div>
         {% endfor %}

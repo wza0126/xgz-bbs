@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS topics (
     kind           TEXT    NOT NULL DEFAULT 'discussion',
     title          TEXT    NOT NULL,
     body           TEXT    NOT NULL DEFAULT '',
+    body_format    TEXT    NOT NULL DEFAULT 'text',      -- text | html（富文本，见 app/richtext.py）
     is_pinned      INTEGER NOT NULL DEFAULT 0,
     is_featured    INTEGER NOT NULL DEFAULT 0,
     status         TEXT    NOT NULL DEFAULT 'open',     -- open | closed
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS posts (
     parent_id  INTEGER REFERENCES posts(id) ON DELETE CASCADE,
     floor_no   INTEGER NOT NULL DEFAULT 0,
     body       TEXT    NOT NULL DEFAULT '',
+    body_format TEXT   NOT NULL DEFAULT 'text',          -- text | html（富文本，见 app/richtext.py）
     is_deleted INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL

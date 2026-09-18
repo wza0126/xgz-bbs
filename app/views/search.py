@@ -40,7 +40,8 @@ def index():
             total = len(topics)
         elif scope == "posts":
             posts = dbm.rows(
-                "SELECT p.id, p.body, p.created_at, p.floor_no, t.id AS topic_id, t.title AS topic_title,"
+                "SELECT p.id, p.body, p.body_format, p.created_at, p.floor_no,"
+                " t.id AS topic_id, t.title AS topic_title,"
                 " b.name AS board_name, u.display_name AS author_name"
                 " FROM posts p JOIN topics t ON t.id = p.topic_id JOIN boards b ON b.id = t.board_id"
                 " JOIN users u ON u.id = p.author_id"

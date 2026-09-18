@@ -5,6 +5,7 @@
 这样无论演示数据被 --reset 过几次、自增 id 漂到多少，测试都成立。
 """
 import http.cookiejar
+import io
 import os
 import re
 import sqlite3
@@ -12,6 +13,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 BASE = os.environ.get("BBS_SMOKE_BASE", "http://127.0.0.1:8009")
@@ -760,6 +762,152 @@ assert_true(len([k for k in kinds_db() if k["is_active"]]) == len(ACTIVE),
             str([k["code"] for k in kinds_db() if k["is_active"]]))
 assert_true([r["code"] for r in kinds_db()] == [k["code"] for k in KINDS],
             "标签顺序与测试前完全一致", str([r["code"] for r in kinds_db()]))
+
+# ---------- 13. 富文本正文 + 评论表情 ----------
+# 本次新增：正文能在编辑器里加粗 / 列条目 / 引用 / 放代码，评论能插表情。
+# 存储按行记格式：topics.body_format / posts.body_format，老帖一律 'text'（渲染完全不变）。
+# 安全底线：富文本入库前做白名单清洗，出库渲染时再洗一遍 —— 把库当成不可信来源。
+
+RT_TITLE = "冒烟测试·富文本（可删）"
+RT_XSS_TITLE = "冒烟测试·富文本XSS（可删）"
+RT_OLD_TITLE = "冒烟测试·老式纯文本（可删）"
+RT_BODY = ("<p>冒烟富文本<strong>粗体</strong>和<em>斜体</em></p>"
+           "<ul><li>条目甲</li><li>条目乙</li></ul>"
+           "<blockquote>引用一段</blockquote>"
+           "<pre><code>print(1)</code></pre>"
+           "<p>表情 😀 收尾</p>")
+RT_XSS = ('<p>安全文字</p><script>alert("rt")</script>'
+          '<img src=x onerror="alert(1)">'
+          '<a href="javascript:alert(2)">坏链接</a>'
+          '<a href="https://www.qq.com" onclick="alert(3)">好链接</a>'
+          '<iframe src="//evil"></iframe>'
+          '<div style="position:fixed;top:0">浮层文字</div>')
+
+switch_to("zhangls", "123456", "张老师（富文本与表情）")
+
+# ① 发布页要有编辑器组件与表情面板
+_, _nh = get(f"/b/{B1}/new", 200, "发布页（富文本编辑器）")
+assert_true("data-rte-bar" in _nh and "data-rte-area" in _nh, "发布页带富文本工具栏与可编辑区")
+assert_true('name="body_format"' in _nh, "发布页带正文格式标记字段")
+_emoji_n = _nh.count('class="emoji-btn"')
+assert_true("data-emoji-pop" in _nh and _emoji_n >= 60, "发布页带表情面板", f"{_emoji_n} 个表情")
+assert_true('value="text" data-rte-format' in _nh,
+            "没开 JS 时默认按纯文本提交（老路径降级安全）")
+
+# ② 富文本发帖：标签要按 HTML 渲染，不能被转义成文字
+post(f"/b/{B1}/new", {"_csrf": csrf_from(_nh), "kind": "discussion", "title": RT_TITLE,
+                      "body": RT_BODY, "body_format": "html"}, 200, "发布富文本话题")
+_c = _con()
+_r1 = _c.execute("SELECT id, body_format FROM topics WHERE title = ?"
+                 " ORDER BY id DESC LIMIT 1", (RT_TITLE,)).fetchone()
+_c.close()
+RT_TID = _r1["id"] if _r1 else None
+assert_true(_r1 is not None and _r1["body_format"] == "html",
+            "富文本话题按 html 格式入库", str(dict(_r1)) if _r1 else "没建出来")
+if RT_TID:
+    _, _rd = get(f"/t/{RT_TID}", 200, "富文本话题详情页")
+    assert_true("<strong>粗体</strong>" in _rd, "加粗按标签渲染（没被转义）")
+    assert_true("<ul>" in _rd and "<li>条目甲</li>" in _rd, "列表按标签渲染")
+    assert_true("<blockquote>引用一段</blockquote>" in _rd, "引用块渲染")
+    assert_true("<pre><code>print(1)</code></pre>" in _rd, "代码块渲染")
+    assert_true("😀" in _rd, "表情字符原样保留")
+    assert_true("body-text rich" in _rd, "富文本用 rich 容器（不套 pre-wrap）")
+    assert_true("&lt;strong&gt;" not in _rd, "页面上没有转义残留")
+
+# ③ XSS：白名单之外一律不留 —— 脚本连内容一起丢，事件属性与危险协议全清
+post(f"/b/{B1}/new", {"_csrf": csrf_from(get(f"/b/{B1}/new", 200)[1]), "kind": "discussion",
+                      "title": RT_XSS_TITLE, "body": RT_XSS, "body_format": "html"},
+     200, "发布含脚本的富文本（应被清洗）")
+_c = _con()
+_r2 = _c.execute("SELECT id, body FROM topics WHERE title = ?"
+                 " ORDER BY id DESC LIMIT 1", (RT_XSS_TITLE,)).fetchone()
+_c.close()
+XSS_TID = _r2["id"] if _r2 else None
+if _r2 is None:
+    bad.append(("含脚本的富文本话题没建出来", 0, ""))
+else:
+    _sb = _r2["body"]
+    assert_true("<script" not in _sb and "</script" not in _sb, "入库时 script 连内容一起被丢掉")
+    assert_true("<img" not in _sb and "onerror" not in _sb, "入库时 img / onerror 被丢掉")
+    assert_true("javascript:" not in _sb, "入库时 javascript: 协议被拦下")
+    assert_true("onclick" not in _sb, "入库时 onclick 这类事件属性被丢掉")
+    assert_true("<iframe" not in _sb and "position:fixed" not in _sb,
+                "入库时 iframe 与 style 属性被丢掉")
+    assert_true("安全文字" in _sb and "坏链接" in _sb, "只脱标签不删内容，正常文字保留")
+    assert_true('href="https://www.qq.com"' in _sb and 'rel="noopener noreferrer"' in _sb,
+                "正常链接保留并自动补上 rel / target")
+    _, _xd = get(f"/t/{XSS_TID}", 200, "含脚本话题的详情页（出库再洗一遍）")
+    assert_true("alert(" not in _xd, "页面上看不到任何攻击载荷")
+    assert_true("浮层文字" in _xd, "被剥掉 style 的 div 保留了文字")
+
+# ④ 评论：富文本 + 表情（表情插在光标处，存的是字符不是图片）
+if RT_TID:
+    _, _td0 = get(f"/t/{RT_TID}", 200)
+    post(f"/t/{RT_TID}/reply", {"_csrf": csrf_from(_td0), "body": "<p>收到 😄 <b>明白</b></p>",
+                                "body_format": "html"}, 200, "发表带表情的富文本评论")
+    _, _rp = get(f"/t/{RT_TID}", 200)
+    assert_true("收到 😄" in _rp, "评论里的表情正常显示")
+    assert_true("<b>明白</b>" in _rp, "评论里的加粗按标签渲染")
+    _c = _con()
+    _pf = _c.execute("SELECT body_format FROM posts WHERE topic_id = ?"
+                     " ORDER BY id DESC LIMIT 1", (RT_TID,)).fetchone()
+    _c.close()
+    assert_true(_pf is not None and _pf["body_format"] == "html", "评论按 html 格式入库")
+
+# ⑤ 老帖（纯文本）必须一点没变：转义输出 + 靠 pre-wrap 保留换行
+_c = _con()
+_old = _c.execute("SELECT id, created_at FROM topics WHERE body_format = 'text' AND body != ''"
+                  " ORDER BY id LIMIT 1").fetchone()
+_uid = _c.execute("SELECT id FROM users WHERE username = 'zhangls'").fetchone()["id"]
+_cur = _c.execute(
+    "INSERT INTO topics (board_id, author_id, kind, title, body, body_format, is_pinned,"
+    " is_featured, status, view_count, reply_count, created_at, updated_at)"
+    " VALUES (?,?,'discussion',?,?,'text',0,0,'open',0,0,?,?)",
+    (B1, _uid, RT_OLD_TITLE, "第一行 <script>不该执行</script>\n第二行", _old["created_at"],
+     _old["created_at"]))
+_c.commit()
+OLD_TID = _cur.lastrowid
+_c.close()
+_, _od = get(f"/t/{OLD_TID}", 200, "老式纯文本话题详情页")
+assert_true("body-text rich" not in _od, "纯文本话题仍走 body-text（pre-wrap 保换行）")
+assert_true("&lt;script&gt;" in _od and "<script>不该执行" not in _od,
+            "纯文本里的尖括号照样转义，不会被当成标签")
+
+# ⑥ 搜索摘要不能漏出标签
+_, _sh = get("/search?q=" + urllib.parse.quote("明白") + "&scope=posts", 200, "搜索回复内容")
+_snips = re.findall(r'<div class="snippet">(.*?)</div>', _sh, re.S)
+assert_true(bool(_snips), "搜索页有结果摘要", f"{len(_snips)} 条")
+assert_true(all("<b>" not in s and "<p>" not in s for s in _snips),
+            "摘要里没有 HTML 标签", str(_snips[:2]))
+assert_true(any("明白" in s for s in _snips), "摘要保留了正文文字")
+
+# ⑦ 材料导出：正文要转成纯文本，不能把标签塞进 txt
+try:
+    with opener.open(f"{BASE}/b/{B1}/export?mode=all", timeout=60) as _r:
+        _zdata = _r.read()
+    _zf = zipfile.ZipFile(io.BytesIO(_zdata))
+    _hit = [n for n in _zf.namelist() if "富文本（可删）" in n and n.endswith(".txt")]
+    if _hit:
+        _ztxt = _zf.read(_hit[0]).decode("utf-8", "replace")
+        assert_true("<p>" not in _ztxt and "<ul>" not in _ztxt, "导出正文里没有 HTML 标签")
+        assert_true("粗体" in _ztxt and "条目甲" in _ztxt, "导出正文保留了文字")
+        assert_true("· 条目甲" in _ztxt, "导出时列表转成了文字行")
+    else:
+        bad.append(("导出包里没找到富文本话题的正文", 0, str(_zf.namelist()[:8])))
+except Exception as e:  # noqa: BLE001
+    bad.append(("富文本话题的材料导出", 0, str(e)))
+
+# ⑧ 收尾：本次造的三个测试话题全部删掉，库里不留痕迹
+for _tid in (RT_TID, XSS_TID, OLD_TID):
+    if not _tid:
+        continue
+    post(f"/t/{_tid}/delete", {"_csrf": csrf_from(get(f"/t/{_tid}", 200)[1])},
+         200, f"删除富文本冒烟话题 #{_tid}")
+_c = _con()
+_left = _c.execute("SELECT COUNT(*) FROM topics WHERE title IN (?,?,?)",
+                   (RT_TITLE, RT_XSS_TITLE, RT_OLD_TITLE)).fetchone()[0]
+_c.close()
+assert_true(_left == 0, "富文本自测造的话题已全部清掉", f"还剩 {_left} 个")
 
 print("=" * 66)
 print(f"通过 {len(ok)} 项，失败 {len(bad)} 项")

@@ -7,6 +7,7 @@ from .. import auth as authm
 from .. import db as dbm
 from .. import kinds as kindsm
 from .. import models
+from .. import richtext
 from .. import utils
 from .files import claim_attachments, form_attach_ids
 
@@ -33,7 +34,13 @@ def create(board_id):
             abort(403)
 
         title = (request.form.get("title") or "").strip()
-        body = (request.form.get("body") or "").strip()
+        # 正文：格式标记（body_format）由编辑器 JS 决定，只有它会填 'html'。
+        # 富文本入库前先做白名单清洗，见 app/richtext.py。
+        try:
+            body, body_fmt = richtext.parse_body(request.form, max_chars=cfg.BODY_MAX_CHARS)
+        except ValueError as e:
+            flash(str(e), "error")
+            return _render_new(board, kind, members, is_leader)
         is_pinned = 1 if (request.form.get("is_pinned") and kind in kindsm.pinnable()) else 0
 
         if len(title) < 2:
@@ -42,10 +49,10 @@ def create(board_id):
 
         ts = dbm.now_ts()
         topic_id = dbm.execute(
-            "INSERT INTO topics (board_id, author_id, kind, title, body, is_pinned,"
+            "INSERT INTO topics (board_id, author_id, kind, title, body, body_format, is_pinned,"
             " status, view_count, reply_count, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,'open',0,0,?,?)",
-            (board_id, user["id"], kind, title[:120], body, is_pinned, ts, ts))
+            " VALUES (?,?,?,?,?,?,?,'open',0,0,?,?)",
+            (board_id, user["id"], kind, title[:120], body, body_fmt, is_pinned, ts, ts))
 
         assignee_ids = []
         if kind == "task":
@@ -150,7 +157,11 @@ def reply(topic_id):
         return redirect(url_for("topics.detail", topic_id=topic_id))
 
     user = authm.current_user()
-    body = (request.form.get("body") or "").strip()
+    try:
+        body, body_fmt = richtext.parse_body(request.form, max_chars=cfg.BODY_MAX_CHARS)
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("topics.detail", topic_id=topic_id))
     parent_id = request.form.get("parent_id")
     parent_id = int(parent_id) if (parent_id or "").isdigit() else None
     if parent_id:
@@ -165,9 +176,9 @@ def reply(topic_id):
     ts = dbm.now_ts()
     floor = (dbm.scalar("SELECT MAX(floor_no) FROM posts WHERE topic_id = ?", (topic_id,), 0) or 0) + 1
     post_id = dbm.execute(
-        "INSERT INTO posts (topic_id, author_id, parent_id, floor_no, body, created_at, updated_at)"
-        " VALUES (?,?,?,?,?,?,?)",
-        (topic_id, user["id"], parent_id, floor, body, ts, ts))
+        "INSERT INTO posts (topic_id, author_id, parent_id, floor_no, body, body_format,"
+        " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+        (topic_id, user["id"], parent_id, floor, body, body_fmt, ts, ts))
 
     claim_attachments(form_attach_ids(request), user_id=user["id"],
                       attachable_type="post", attachable_id=post_id, board_id=topic["board_id"])
@@ -182,7 +193,9 @@ def reply(topic_id):
         prow = dbm.row("SELECT author_id FROM posts WHERE id = ?", (parent_id,))
         if prow:
             targets.append(prow["author_id"])
-    targets += utils.users_by_display_names(utils.extract_mentions(body))
+    # 富文本正文里 @某人 会被标签包住，先转纯文本再匹配（例如 <b>@张三</b>）
+    targets += utils.users_by_display_names(
+        utils.extract_mentions(richtext.to_plain(body, body_fmt)))
 
     link = url_for("topics.detail", topic_id=topic_id)
     utils.notify(targets, actor_id=user["id"], kind="reply",
@@ -250,18 +263,24 @@ def edit(topic_id):
 
     if request.method == "POST":
         title = (request.form.get("title") or "").strip()
-        body = (request.form.get("body") or "").strip()
+        try:
+            body, body_fmt = richtext.parse_body(request.form, max_chars=cfg.BODY_MAX_CHARS)
+        except ValueError as e:
+            flash(str(e), "error")
+            return redirect(url_for("topics.edit", topic_id=topic_id))
         if len(title) < 2:
             flash("标题太短了", "error")
         else:
-            dbm.execute("UPDATE topics SET title = ?, body = ?, updated_at = ? WHERE id = ?",
-                        (title[:120], body, dbm.now_ts(), topic_id))
+            dbm.execute("UPDATE topics SET title = ?, body = ?, body_format = ?, updated_at = ?"
+                        " WHERE id = ?",
+                        (title[:120], body, body_fmt, dbm.now_ts(), topic_id))
             claim_attachments(form_attach_ids(request), user_id=user["id"],
                               attachable_type="topic", attachable_id=topic_id,
                               board_id=topic["board_id"])
             if topic["kind"] == "task":
                 points = max(0, min(int(request.form.get("points") or 0), 1000))
                 due_date = (request.form.get("due_date") or "").strip() or None
+                # 任务说明与正文本就是同一段（同一个输入框），格式也保持一致
                 dbm.execute("UPDATE tasks SET title = ?, detail = ?, points = ?, due_date = ?"
                             " WHERE topic_id = ?", (title[:120], body, points, due_date, topic_id))
             flash("已保存修改", "ok")

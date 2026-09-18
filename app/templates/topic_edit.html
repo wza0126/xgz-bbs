@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import csrf, upload_area, file_rows with context %}
+{% from "_macros.html" import csrf, upload_area, file_rows, rich_editor with context %}
 {% block title %}编辑 · {{ topic.title }}{% endblock %}
 
 {% block content %}
@@ -19,10 +19,10 @@
       <input type="text" name="title" value="{{ topic.title }}" required maxlength="120">
     </label>
 
-    <label class="fld">
+    <div class="fld">
       <span>{{ '任务说明' if task else '正文' }}</span>
-      <textarea name="body" rows="7" class="ta">{{ topic.body }}</textarea>
-    </label>
+      {{ rich_editor(topic.body, topic.body_format, '', 7) }}
+    </div>
 
     {% if task %}
     <div class="row gap12">

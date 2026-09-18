@@ -67,13 +67,41 @@ def execute_many(sql: str, seq):
     return cur.rowcount
 
 
+# ---------- 轻量迁移：只做「加列」，不动老数据 ----------
+# schema.sql 里的 CREATE TABLE IF NOT EXISTS 只能在建新库时生效，
+# 而 SQLite 又没有 ADD COLUMN IF NOT EXISTS，所以老库要靠这里补字段。
+# 每条都必须有默认值，否则已有行会违反 NOT NULL。重复运行安全。
+_ADDED_COLUMNS = [
+    # (表, 列, 定义)   —— 富文本正文：老数据一律 'text'，保持原样显示
+    ("topics", "body_format", "TEXT NOT NULL DEFAULT 'text'"),
+    ("posts", "body_format", "TEXT NOT NULL DEFAULT 'text'"),
+]
+
+
+def _ensure_columns(conn):
+    fixed = []
+    for table, col, decl in _ADDED_COLUMNS:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if not cols:
+            continue        # 表都没建出来，说明 schema.sql 有问题，交给上面报错
+        if col not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+            fixed.append(f"{table}.{col}")
+    if fixed:
+        conn.commit()
+    return fixed
+
+
 def init_db(app):
-    """建表 + 灌话题类型种子 + 首次运行自动创建管理员。"""
+    """建表 + 补字段 + 灌话题类型种子 + 首次运行自动创建管理员。"""
     schema = (Path(app.root_path) / "schema.sql").read_text(encoding="utf-8")
     conn = connect(app.config["DB_PATH"])
     try:
         conn.executescript(schema)
         conn.commit()
+        fixed = _ensure_columns(conn)
+        if fixed:
+            app.logger.info("补上了缺失的字段：%s", "、".join(fixed))
         # 话题类型清单存库（管理员可在后台增删）。已存在的 code 不会被覆盖，
         # 所以每次启动跑一遍是安全的：只补「种子里有、库里没有」的类型。
         from . import kinds as kindsm

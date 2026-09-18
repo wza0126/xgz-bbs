@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% from "_macros.html" import avatar, kind_tag, status_tag, file_rows, csrf, upload_area with context %}
+{% from "_macros.html" import avatar, kind_tag, status_tag, file_rows, csrf, upload_area,
+   body_block, rich_editor with context %}
 {% block title %}{{ topic.title }}{% endblock %}
 
 {% block content %}
@@ -50,7 +51,7 @@
 
       {# 任务是「任务即话题」：正文与任务说明同源，任务卡里已经展示过一次，这里不再重复贴 #}
       {% if topic.body and not (task and task.detail == topic.body) %}
-      <article class="body-text">{{ topic.body }}</article>
+      {{ body_block(topic.body, topic.body_format) }}
       {% endif %}
       {% if topic_atts %}
       {{ file_rows(topic_atts, can_delete=True, me_id=current_user.id, leader=is_leader) }}
@@ -68,7 +69,8 @@
         {% endif %}
         {% if task.status == 'closed' %}<span class="tag t-todo">已关闭</span>{% endif %}
       </div>
-      {% if task.detail %}<div class="body-text">{{ task.detail }}</div>{% endif %}
+      {# 任务说明与正文本就是同一段（同一个输入框），格式跟着话题走 #}
+      {% if task.detail %}{{ body_block(task.detail, topic.body_format) }}{% endif %}
 
       <div class="tgrid">
         <div>
@@ -129,8 +131,9 @@
           {% if my_assignee.reviewed_at %}（{{ my_assignee.reviewed_at | dt }}）{% endif %}
           {% if my_assignee.review_note %}，评语：{{ my_assignee.review_note }}{% endif %}。</p>
       {% else %}
-        {% set sub_body = (posts | selectattr('id', 'equalto', my_assignee.submission_post_id)
-                           | map(attribute='body') | first) if my_assignee.submission_post_id else '' %}
+        {# 提交过就带出上一次的内容；富文本要连格式一起带上，否则会被当纯文本二次转义 #}
+        {% set sub_post = (posts | selectattr('id', 'equalto', my_assignee.submission_post_id)
+                           | list | first) if my_assignee.submission_post_id else none %}
         {% if my_assignee.status == 'rejected' and my_assignee.review_note %}
         <div class="alert danger">被打回：{{ my_assignee.review_note }}</div>
         {% endif %}
@@ -142,8 +145,9 @@
 
         <form method="post" action="{{ url_for('tasks.submit', topic_id=topic.id) }}">
           {{ csrf() }}
-          <textarea name="body" rows="4" class="ta"
-                    placeholder="写点说明：做了什么、遇到什么问题、需要谁配合……">{{ sub_body }}</textarea>
+          {{ rich_editor(sub_post.body if sub_post else '',
+                         sub_post.body_format if sub_post else 'text',
+                         '写点说明：做了什么、遇到什么问题、需要谁配合……', 4) }}
           {{ upload_area(board.id, 'draft', 0) }}
           <div class="row top-gap">
             <button class="btn pri" type="submit">{{ '重新提交' if my_assignee.status == 'rejected' else '标记完成并提交' }}</button>
@@ -174,7 +178,7 @@
                 {% if p.updated_at != p.created_at %}<span class="muted">· 已编辑</span>{% endif %}
                 <span class="floor">{{ p.floor_no }} 楼</span>
               </div>
-              {% if p.body %}<div class="body-text">{{ p.body }}</div>{% endif %}
+              {% if p.body %}{{ body_block(p.body, p.body_format) }}{% endif %}
               {{ file_rows(post_atts.get(p.id, []), can_delete=True, me_id=current_user.id, leader=is_leader) }}
               <div class="pacts">
                 {% if topic.status != 'closed' %}
@@ -198,7 +202,7 @@
                     <span class="muted">回复 {{ p.floor_no }} 楼 · {{ c.created_at | dt }}</span>
                     <span class="floor">#{{ c.floor_no }}</span>
                   </div>
-                  {% if c.body %}<div class="body-text">{{ c.body }}</div>{% endif %}
+                  {% if c.body %}{{ body_block(c.body, c.body_format) }}{% endif %}
                   {{ file_rows(post_atts.get(c.id, []), can_delete=True, me_id=current_user.id, leader=is_leader) }}
                   {% if c.author_id == current_user.id or is_leader %}
                   <div class="pacts">
@@ -228,7 +232,7 @@
           正在回复 <b id="replyToName"></b>
           <button type="button" class="linkish" id="cancelReply">取消</button>
         </div>
-        <textarea name="body" rows="4" class="ta" placeholder="写下你的想法……用 @姓名 可以通知某人"></textarea>
+        {{ rich_editor('', 'text', '写下你的想法……用 @姓名 可以通知某人；点「☺ 表情」可以插表情', 4) }}
         {{ upload_area(board.id, 'draft', 0) }}
         <div class="row top-gap">
           <button class="btn pri" type="submit">发表回复</button>

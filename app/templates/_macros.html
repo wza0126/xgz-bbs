@@ -62,3 +62,63 @@
   <div class="up-list"></div>
 </div>
 {%- endmacro %}
+
+
+{# ---------------- 富文本 ----------------
+
+   正文展示：走哪条路由库里的 body_format 决定。
+     html → rich_body() 白名单清洗（把数据库当不可信来源，出库再洗一遍）
+     text → 转义输出，靠 .body-text 的 pre-wrap 保留换行（与升级前表现完全一致）
+#}
+{% macro body_block(value, fmt='text') -%}
+{%- if fmt == 'html' -%}
+<div class="body-text rich">{{ rich_body(value, 'html') }}</div>
+{%- else -%}
+<div class="body-text">{{ value }}</div>
+{%- endif -%}
+{%- endmacro %}
+
+
+{# 富文本编辑器（发布正文 / 回复 / 任务提交共用）
+
+   降级：默认渲染成普通 <textarea>，浏览器没开 JS 时照旧能用，提交的是纯文本。
+   有 JS 时 app.js 会：
+     ① 显示工具栏与编辑区、藏起 textarea
+     ② 把初始内容搬进编辑区（html 直接 innerHTML；text 转义后按换行分段）
+     ③ 每次输入把编辑区 innerHTML 同步回 textarea，并把 body_format 设成 html
+   所以服务端两条路径都得能正确处理 —— 见 app/richtext.py: parse_body。
+   textarea 里始终放**纯文本**（html 内容也先转纯文本），这样万一没 JS，
+   打开编辑页看到的是可读的文字而不是空框，不会一保存就把正文清空。 #}
+{% macro rich_editor(value='', fmt='text', placeholder='', rows=6, field='body') -%}
+<div class="rte" data-rte>
+  <div class="rte-bar hide" data-rte-bar>
+    <button type="button" class="rte-btn b" data-cmd="bold" title="加粗（Ctrl+B）">B</button>
+    <button type="button" class="rte-btn i" data-cmd="italic" title="斜体（Ctrl+I）">I</button>
+    <button type="button" class="rte-btn u" data-cmd="underline" title="下划线（Ctrl+U）">U</button>
+    <button type="button" class="rte-btn s" data-cmd="strikeThrough" title="删除线">S</button>
+    <span class="rte-sp"></span>
+    <button type="button" class="rte-btn txt" data-cmd="insertUnorderedList" title="项目符号">列表</button>
+    <button type="button" class="rte-btn txt" data-cmd="insertOrderedList" title="编号列表">编号</button>
+    <button type="button" class="rte-btn txt" data-cmd="formatBlock" data-arg="blockquote" title="引用一段话">引用</button>
+    <button type="button" class="rte-btn txt" data-cmd="formatBlock" data-arg="pre" title="代码块（等宽、保留空格）">代码</button>
+    <span class="rte-sp"></span>
+    <button type="button" class="rte-btn txt" data-link title="给选中的文字加链接">链接</button>
+    <button type="button" class="rte-btn txt" data-cmd="removeFormat" title="清除选中部分的格式">清格式</button>
+    <span class="rte-sp"></span>
+    <button type="button" class="rte-btn txt emo" data-emoji-toggle title="插入表情">☺ 表情</button>
+  </div>
+  <div class="rte-area rich hide" contenteditable="true" spellcheck="false" data-rte-area
+       style="min-height:{{ (rows * 1.5) | round(1) }}em"
+       data-ph="{{ placeholder }}" data-init="{{ value }}" data-init-fmt="{{ fmt }}"></div>
+  <div class="emoji-pop hide" data-emoji-pop>
+    <div class="emoji-head">点一下插入到光标处</div>
+    <div class="emoji-grid">
+      {%- for e in EMOJI %}<button type="button" class="emoji-btn" data-emoji="{{ e }}">{{ e }}</button>{% endfor -%}
+    </div>
+  </div>
+  <textarea name="{{ field }}" rows="{{ rows }}" class="ta" data-rte-src
+            placeholder="{{ placeholder }}">{{ to_plain(value, fmt) }}</textarea>
+  <input type="hidden" name="{{ field }}_format" value="text" data-rte-format>
+  <div class="rte-hint hide" data-rte-hint>{{ RICH_HINT }}</div>
+</div>
+{%- endmacro %}

@@ -14,6 +14,7 @@ from pathlib import Path
 from flask import current_app
 
 from . import db as dbm
+from . import richtext
 
 TZ = timezone(timedelta(hours=8))
 
@@ -289,6 +290,7 @@ def export_board_zip(board_id: int, mode: str = "all"):
 
     tasks = dbm.rows(
         "SELECT k.*, t.created_at AS topic_created, t.title AS topic_title, t.status AS topic_status,"
+        " t.body_format AS topic_body_format,"
         " u.display_name AS creator_name FROM tasks k JOIN topics t ON t.id = k.topic_id"
         " JOIN users u ON u.id = k.created_by WHERE k.board_id = ? ORDER BY k.id", (board_id,))
     assignees = {}
@@ -377,15 +379,18 @@ def export_board_zip(board_id: int, mode: str = "all"):
                     f"　浏览：{t['view_count']}　回复：{t['reply_count']}",
                     f"状态：{'已关闭' if t['status'] == 'closed' else '进行中'}"
                     f"{'　[置顶]' if t['is_pinned'] else ''}{'　[精]' if t['is_featured'] else ''}",
-                    "-" * 56, "", t["body"] or "（无正文）", "",
+                    "-" * 56, "",
+                    richtext.to_plain(t["body"], t["body_format"]) or "（无正文）", "",
                 ]
                 post_lines = []
                 for p in posts_map.get(t["id"], []):
                     who = p["author_name"]
+                    # 富文本正文导出成纯文本，zip 里不该出现 <p> 之类的标签
+                    ptext = richtext.to_plain(p["body"], p["body_format"])
                     if p["parent_id"]:
-                        post_lines.append(f"    └ [{p['floor_no']}楼 回复] {who}（{fmt_dt(p['created_at'])}）：{p['body']}")
+                        post_lines.append(f"    └ [{p['floor_no']}楼 回复] {who}（{fmt_dt(p['created_at'])}）：{ptext}")
                     else:
-                        post_lines.append(f"[{p['floor_no']}楼] {who}（{fmt_dt(p['created_at'])}）：{p['body']}")
+                        post_lines.append(f"[{p['floor_no']}楼] {who}（{fmt_dt(p['created_at'])}）：{ptext}")
                     for att in post_atts.get(p["id"], []):
                         post_lines.append(f"      · 附件：{att['orig_name']}（{human_size(att['size_bytes'])}）")
                 head += post_lines or ["（暂无讨论）"]
@@ -420,7 +425,7 @@ def export_board_zip(board_id: int, mode: str = "all"):
                     f"任务：{k['title']}",
                     f"发布：{k['creator_name']}　{fmt_dt(k['topic_created'])}",
                     f"截止：{k['due_date'] or '未设'}　满分：{k['points'] or '不计分'}",
-                    f"说明：{k['detail'] or '（无）'}",
+                    f"说明：{richtext.to_plain(k['detail'], k['topic_body_format']) or '（无）'}",
                     "-" * 56, "", "完成情况：",
                 ]
                 for a in rows_a:
@@ -434,7 +439,8 @@ def export_board_zip(board_id: int, mode: str = "all"):
                     sub = next((p for p in posts_map.get(k["topic_id"], [])
                                 if p["id"] == a["submission_post_id"]), None)
                     if sub and sub["body"]:
-                        lines.append(f"      提交说明：{sub['body']}")
+                        lines.append("      提交说明："
+                                     + richtext.to_plain(sub["body"], sub["body_format"]))
                     for att in post_atts.get(a["submission_post_id"], []) if a["submission_post_id"] else []:
                         lines.append(f"      附件：{att['orig_name']}（{human_size(att['size_bytes'])}）")
                 zf.writestr(kfolder + "_任务说明与完成情况.txt", _txt_io("\n".join(lines)).getvalue())

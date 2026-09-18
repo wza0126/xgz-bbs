@@ -196,7 +196,8 @@
       if (nm) { nm.textContent = name + ' ' + (btn.closest('.post').querySelector('.floor')
         ? btn.closest('.post').querySelector('.floor').textContent : ''); }
       bar.classList.remove('hide');
-      var ta = document.querySelector('#replyForm textarea');
+      var ta = document.querySelector('#replyForm [data-rte-area]')
+            || document.querySelector('#replyForm textarea');
       if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     });
   });
@@ -210,6 +211,251 @@
       if (bar) { bar.classList.add('hide'); }
     });
   }
+
+  /* ---------------- 富文本编辑器 ----------------
+     页面本来渲染的是普通 <textarea>（没开 JS 也能发帖），这里把它换成所见即所得编辑区。
+
+     提交协议：把编辑区的 innerHTML 写进 textarea，并把同级的 body_format 设成 'html'。
+     服务端据此走富文本分支，并再做一次白名单清洗（app/richtext.py）。
+     编辑区清空时两个字段一起复位成纯文本，免得往库里存一堆 <br>。
+
+     这里用的是 document.execCommand —— 虽然被标了 deprecated，但主流浏览器至今完整支持；
+     自己不引依赖手撸 Range 反而更容易踩兼容坑，这是当前最省的选择。 */
+  function initEditor(root) {
+    var bar = root.querySelector('[data-rte-bar]');
+    var area = root.querySelector('[data-rte-area]');
+    var src = root.querySelector('[data-rte-src]');
+    var fmtIn = root.querySelector('[data-rte-format]');
+    var hint = root.querySelector('[data-rte-hint]');
+    var pop = root.querySelector('[data-emoji-pop]');
+    var form = root.closest('form');
+    if (!bar || !area || !src || !fmtIn) { return; }
+
+    var savedRange = null;
+
+    function isBlank() {
+      return !area.textContent.trim() && !area.querySelector('img,hr');
+    }
+
+    function setPlainText(text) {
+      area.textContent = '';
+      String(text).split('\n').forEach(function (line, i) {
+        if (i) { area.appendChild(document.createElement('br')); }
+        area.appendChild(document.createTextNode(line));
+      });
+    }
+
+    function sync() {
+      var empty = isBlank();
+      src.value = empty ? '' : area.innerHTML;
+      fmtIn.value = empty ? 'text' : 'html';
+      area.classList.toggle('is-empty', empty);
+    }
+
+    // 打字/删字都要实时同步：textarea 才是提交时真正被读的字段，
+    // 漏了这个监听，占位提示会一直压在已输入的文字上（真实浏览器里复现过）。
+    area.addEventListener('input', function () { sync(); refreshBar(); });
+    area.addEventListener('blur', sync);
+
+    function grabRange() {
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        var r = sel.getRangeAt(0);
+        if (area.contains(r.commonAncestorContainer)) { savedRange = r.cloneRange(); }
+      }
+    }
+
+    function putRange() {
+      if (!savedRange) { return false; }
+      try {
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+        return true;
+      } catch (e) { return false; }     // 选区所在的节点可能已经被改动过
+    }
+
+    function caretToEnd() {
+      var r = document.createRange();
+      r.selectNodeContents(area);
+      r.collapse(false);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+
+    function insertAtCaret(text) {
+      try {
+        if (document.execCommand('insertText', false, text)) { return; }
+      } catch (e) { /* 落到下面的手写兜底 */ }
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount) { return; }
+      var r = sel.getRangeAt(0);
+      r.deleteContents();
+      var frag = document.createDocumentFragment();
+      String(text).split('\n').forEach(function (line, i) {
+        if (i) { frag.appendChild(document.createElement('br')); }
+        frag.appendChild(document.createTextNode(line));
+      });
+      var last = frag.lastChild;
+      r.insertNode(frag);
+      if (last) {
+        r.setStartAfter(last);
+        r.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    }
+
+    // ---- 初始内容 ----
+    // 关键：纯文本要转义后插入，绝不能直接当 HTML 塞进去（否则老帖子一编辑就变形）
+    var init = area.getAttribute('data-init') || '';
+    if (init) {
+      if ((area.getAttribute('data-init-fmt') || 'text') === 'html') {
+        area.innerHTML = init;
+      } else {
+        setPlainText(init);
+      }
+    }
+    bar.classList.remove('hide');
+    area.classList.remove('hide');
+    if (hint) { hint.classList.remove('hide'); }
+    src.classList.add('hide');
+
+    // 回车产出的块统一用 <p>：输出干净，服务端白名单也好洗
+    try {
+      document.execCommand('styleWithCSS', false, false);
+      document.execCommand('defaultParagraphSeparator', false, 'p');
+    } catch (e) { /* 不支持就用浏览器默认行为 */ }
+
+    // ---- 工具栏 ----
+    var cmdBtns = Array.prototype.slice.call(bar.querySelectorAll('[data-cmd]'));
+    cmdBtns.forEach(function (btn) {
+      // 按下时别让按钮抢走焦点，否则选区就丢了
+      btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      btn.addEventListener('click', function () {
+        var cmd = btn.getAttribute('data-cmd');
+        var arg = btn.getAttribute('data-arg') || null;
+        area.focus();
+        if (!putRange()) { caretToEnd(); }
+        try {
+          if (cmd === 'formatBlock') {
+            var cur = '';
+            try { cur = String(document.queryCommandValue('formatBlock') || '').toLowerCase(); } catch (e2) {}
+            // 再点一次退回普通段落，做成开关
+            document.execCommand('formatBlock', false,
+              cur === String(arg).toLowerCase() ? 'p' : arg);
+          } else {
+            document.execCommand(cmd, false, arg);
+          }
+        } catch (e2) { /* 命令不支持就静默跳过 */ }
+        grabRange();
+        refreshBar();
+        sync();
+      });
+    });
+
+    var linkBtn = bar.querySelector('[data-link]');
+    if (linkBtn) {
+      linkBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      linkBtn.addEventListener('click', function () {
+        area.focus();
+        grabRange();
+        var sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+          window.alert('先在正文里用鼠标选中要加链接的文字，再点这个按钮。');
+          return;
+        }
+        var url = window.prompt('输入网址（例：https://www.qq.com）：', 'https://');
+        if (!url) { return; }
+        url = url.trim();
+        if (!/^https?:\/\//i.test(url) && url.charAt(0) !== '/') {
+          url = 'https://' + url.replace(/^\/+/, '');
+        }
+        area.focus();
+        putRange();
+        try { document.execCommand('createLink', false, url); } catch (e) {}
+        grabRange();
+        sync();
+      });
+    }
+
+    // ---- 表情 ----
+    var emoBtn = bar.querySelector('[data-emoji-toggle]');
+    if (emoBtn && pop) {
+      emoBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      emoBtn.addEventListener('click', function () { pop.classList.toggle('hide'); });
+      pop.querySelectorAll('[data-emoji]').forEach(function (b) {
+        b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        b.addEventListener('click', function () {
+          var ch = b.getAttribute('data-emoji') || '';
+          if (!ch) { return; }
+          area.focus();
+          if (!putRange()) { caretToEnd(); }
+          insertAtCaret(ch);
+          grabRange();
+          sync();
+        });
+      });
+      document.addEventListener('click', function (e) {
+        if (!pop.classList.contains('hide') && !root.contains(e.target)) {
+          pop.classList.add('hide');
+        }
+      });
+    }
+
+    // ---- 粘贴 ----
+    // 一律按纯文本收：从 Word / 网页粘过来的东西带着大量样式和隐藏标签，
+    // 服务端反正会剥掉，与其粘完变形不如直接给干净的文字。
+    area.addEventListener('paste', function (e) {
+      var dt = e.clipboardData || window.clipboardData;
+      if (!dt) { return; }
+      var text = dt.getData('text/plain') || '';
+      e.preventDefault();
+      if (text) { insertAtCaret(text); }
+      grabRange();
+      sync();
+    });
+    // 图片/文件拖进编辑区会插入 blob: 图片，正文里不该出现，直接挡掉
+    ['dragover', 'drop'].forEach(function (ev) {
+      area.addEventListener(ev, function (e) { e.preventDefault(); });
+    });
+
+    // ---- 工具栏高亮 ----
+    var STATE_CMDS = ['bold', 'italic', 'underline', 'strikeThrough',
+                      'insertUnorderedList', 'insertOrderedList'];
+    function refreshBar() {
+      cmdBtns.forEach(function (btn) {
+        var cmd = btn.getAttribute('data-cmd');
+        var on = false;
+        if (STATE_CMDS.indexOf(cmd) >= 0) {
+          try { on = document.queryCommandState(cmd); } catch (e) {}
+        } else if (cmd === 'formatBlock' && btn.getAttribute('data-arg')) {
+          var cur = '';
+          try { cur = String(document.queryCommandValue('formatBlock') || '').toLowerCase(); } catch (e) {}
+          on = cur === btn.getAttribute('data-arg').toLowerCase();
+        }
+        btn.classList.toggle('on', !!on);
+      });
+    }
+    area.addEventListener('keyup', refreshBar);
+    area.addEventListener('mouseup', refreshBar);
+    document.addEventListener('selectionchange', function () {
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        var r = sel.getRangeAt(0);
+        if (area.contains(r.commonAncestorContainer)) {
+          savedRange = r.cloneRange();
+          refreshBar();
+        }
+      }
+    });
+
+    sync();
+    if (form) { form.addEventListener('submit', sync); }
+  }
+
+  document.querySelectorAll('[data-rte]').forEach(initEditor);
 
   /* ---------------- 未读数轮询 ---------------- */
   var badge = document.getElementById('notifBadge');

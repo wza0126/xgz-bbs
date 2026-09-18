@@ -260,7 +260,7 @@ check(task_topic is not None, "找到一个任务话题（用于校验任务说�
 if task_topic:
     _, tp = req(f"/t/{task_topic}")
     m = re.search(r'<section class="card taskcard" id="task">(.*?)</section>', tp, re.S)
-    d = re.search(r'<div class="body-text">(.*?)</div>', m.group(1), re.S) if m else None
+    d = re.search(r'<div class="body-text(?: rich)?">(.*?)</div>', m.group(1), re.S) if m else None
     if not d:
         LINES.append(f"… 任务 #{task_topic} 没有任务说明，跳过重复校验")
     else:
@@ -270,6 +270,57 @@ if task_topic:
         _main = re.search(r'<section class="card">(.*?)</section>', tp, re.S)
         check(not (_main and _txt in _main.group(0)),
               "主帖卡不再重复任务说明（改前后这里会重复一遍）")
+
+# ---------- 5.7 富文本正文 + 评论表情（只读） ----------
+# 加富文本最怕两件事：① 老帖被改坏（纯文本被当 HTML 渲染）② 编辑器组件没真的上线。
+# 所以这里既不发文也不回复，只看静态资源版本 + 发布页组件 + 老帖渲染是否原样。
+_, _js = req("/static/js/app.js")
+check("initEditor" in _js and "data-rte-area" in _js, "app.js 已是带富文本编辑器的版本")
+check("data-emoji-toggle" in _js and "insertAtCaret" in _js, "app.js 里有表情插入逻辑")
+check("getData('text/plain')" in _js, "app.js 粘贴时按纯文本净化（不带进外部样式）")
+_, _css = req("/static/css/app.css")
+check(".rte-area" in _css and ".emoji-grid" in _css, "app.css 带编辑器与表情面板样式")
+check(".body-text.rich" in _css and ".rich blockquote" in _css, "app.css 带富文本排版规则")
+
+if bid:
+    _, _np2 = req(f"/b/{bid}/new")
+    check("data-rte" in _np2 and "data-rte-bar" in _np2, "发布页有富文本编辑器（工具栏 + 可编辑区）")
+    _en = _np2.count('class="emoji-btn"')
+    check(_en >= 60, f"发布页表情面板有 {_en} 个表情")
+    check('name="body_format"' in _np2, "发布页带正文格式标记字段")
+    check('value="text" data-rte-format' in _np2,
+          "默认格式是 text —— 浏览器没开 JS 时仍按纯文本存，老路径不受影响")
+
+# 找一个有正文的老话题，确认纯文本渲染一点没变（升级前怎么显示，现在还怎么显示）
+_legacy = None
+for _b in bids:
+    _, _lp = req(f"/b/{_b}")
+    for _t in re.findall(r"/t/(\d+)", _lp):
+        _, _tp2 = req(f"/t/{_t}")
+        _bm = re.search(r'<div class="body-text(?: rich)?">(.*?)</div>', _tp2, re.S)
+        if _bm and re.sub(r"<[^>]+>", "", _bm.group(1)).strip():
+            _legacy = (int(_t), _bm.group(1), _tp2)
+            break
+    if _legacy:
+        break
+check(_legacy is not None, "找到一个带正文的老话题（用于校验纯文本渲染没被改坏）")
+if _legacy:
+    _lt, _lhtml, _lpage = _legacy
+    check("body-text rich" not in _lpage,
+          f"老话题 #{_lt} 仍走纯文本容器（body-text / pre-wrap），升级没改老帖渲染")
+    _snippet = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", _lhtml)).strip()[:24]
+    check(bool(_snippet) and _snippet in re.sub(r"\s+", " ", _lpage),
+          "老帖正文文字照常显示", _snippet)
+
+    # 评论区（回复表单）的表情入口 —— 本次需求的重点之一
+    _rf = re.search(r'<form[^>]*id="replyForm".*?</form>', _lpage, re.S)
+    check(_rf is not None, f"话题 #{_lt} 详情页有回复表单")
+    if _rf:
+        _rb = _rf.group(0)
+        check("data-rte-area" in _rb and "data-rte-bar" in _rb, "评论区带富文本工具栏与可编辑区")
+        check("data-emoji-pop" in _rb, "评论区有表情入口")
+        check(_rb.count('class="emoji-btn"') >= 60,
+              f"评论区表情面板数量充足（{_rb.count('class=\"emoji-btn\"')} 个）")
 
 # ---------- 6. 无副作用确认 ----------
 _, page2 = req("/admin/users")
