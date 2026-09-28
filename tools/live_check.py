@@ -299,22 +299,24 @@ if bid:
     check(bool(_acc) and "image/png" in _acc.group(1) and "svg" not in _acc.group(1),
           "图片选择器只收位图（svg 插不进正文）", _acc.group(1) if _acc else "没找到 accept")
 
-# 找一个有正文的老话题，确认纯文本渲染一点没变（升级前怎么显示，现在还怎么显示）
+# 找一个**纯文本**老话题，确认老帖的渲染一点没变（升级前怎么显示，现在还怎么显示）。
+# 注意正则要精确匹配不带 rich 的容器 —— 要是写成 body-text(?: rich)? ，就会挑到富文本话题，
+# 后面再断言「整页没有 rich」必然自相矛盾（线上已经有老师用富文本发帖了，这坑真踩过）。
 _legacy = None
 for _b in bids:
     _, _lp = req(f"/b/{_b}")
     for _t in re.findall(r"/t/(\d+)", _lp):
         _, _tp2 = req(f"/t/{_t}")
-        _bm = re.search(r'<div class="body-text(?: rich)?">(.*?)</div>', _tp2, re.S)
+        _bm = re.search(r'<div class="body-text">(.*?)</div>', _tp2, re.S)
         if _bm and re.sub(r"<[^>]+>", "", _bm.group(1)).strip():
             _legacy = (int(_t), _bm.group(1), _tp2)
             break
     if _legacy:
         break
-check(_legacy is not None, "找到一个带正文的老话题（用于校验纯文本渲染没被改坏）")
+check(_legacy is not None, "找到一个纯文本老话题（正文容器不带 rich）")
 if _legacy:
     _lt, _lhtml, _lpage = _legacy
-    check("body-text rich" not in _lpage,
+    check('<div class="body-text">' in _lpage,
           f"老话题 #{_lt} 仍走纯文本容器（body-text / pre-wrap），升级没改老帖渲染")
     _snippet = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", _lhtml)).strip()[:24]
     check(bool(_snippet) and _snippet in re.sub(r"\s+", " ", _lpage),
