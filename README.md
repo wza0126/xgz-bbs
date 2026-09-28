@@ -89,8 +89,8 @@ xgz-bbs/
 │  ├─ views/            8 个蓝图：auth boards topics tasks files notify search admin
 │  ├─ templates/        Jinja2 模板
 │  └─ static/           app.css + app.js
-├─ tools/               演示数据 / 冒烟测试 / 线上安全验收 / 备份 / 数据盘点 / 重置密码 / 换行符检查 / 草稿清理
-├─ deploy/              群晖 NAS 部署脚本
+├─ tools/               演示数据 / 冒烟测试 / 线上安全验收 / 备份 / 数据盘点 / 重置密码 / 换行符检查 / 草稿清理 / 一键部署
+├─ deploy/              群晖 NAS 部署脚本（LF 换行，会被同步到 ~/myproject/）
 └─ docs/                设计方案 · 部署说明 · UI 原型
 ```
 
@@ -146,7 +146,22 @@ python tools/inspect_data.py           # 只读盘点：数据量 + 各账号内
 python tools/check_eol.py              # 检查 deploy/*.sh 是不是 LF 换行
 python tools/reset_admin.py --list
 python tools/cleanup_drafts.py         # 清理过期草稿附件（默认干跑，加 --apply 才删）
+python tools/cleanup_drafts.py --scan-orphans   # 磁盘与库对账：孤儿文件 / 脏记录
 ```
+
+### 一键部署（Windows）
+
+双击 `dist/行知教研吧-一键部署.exe` 就完成整条上线流水线：
+
+```
+连上 NAS → 备份数据库 → 按 md5 只传变化的文件 → 清 __pycache__
+→ （改了 .py / .sql 才）重启服务 → 自检
+```
+
+- 只传真正变了的文件（通常 1~3 个），每个文件传完立刻在远端 `md5sum` 回比
+- `data/` 是硬禁区 —— 线上有真实数据，永远不会被本地覆盖
+- 只改模板 / css / js / 文档时**不重启**，正在用的老师无感
+- 想先看会改哪些文件，用 `xgz-deploy.exe --cli --dry`；重新打包见 `python tools/build_deployer.py`
 
 > ⚠️ **线上有真实数据之后，不要再跑 `smoke_test.py`。** 它会确认/打回真实的提交、
 > 调整真实的指派、在真实话题里发回复、还建测试账号 —— 在生产库上这些都是破坏性的。

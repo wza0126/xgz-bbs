@@ -12,6 +12,11 @@ _verify_*.py
 /_*.html
 /_*.png
 
+# 一键部署工具的产物（exe 体积大，不进仓库；源码在 tools/deploy_nas.py）
+/build/
+/dist/
+deploy.ini
+
 # 编辑器
 .vscode/
 .idea/
