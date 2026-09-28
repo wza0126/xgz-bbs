@@ -64,6 +64,13 @@ README = """行知教研吧 · 便携演示版
                 uploads\\
                 secret.key
 
+     【正式那台的 data 在哪】
+       正式那台是群晖 NAS。用浏览器登录 DSM 的 File Station，进到
+           home / myproject / 0 / xgz-bbs / data
+       把整个 data 文件夹下载下来即可。
+       在 Windows 资源管理器地址栏敲 \\\\192.168.10.201\\home 也能进去，
+       路径是一样的：myproject\\0\\xgz-bbs\\data
+
   3. 双击「行知教研吧-演示版.exe」。
      窗口里会列出几个 http://192.168.x.x:8009 这样的地址，
      本机会自动打开浏览器；想让别人看，就把那个地址发给他们
@@ -160,11 +167,11 @@ def make_icon(out_path: Path) -> Path | None:
     return out_path
 
 
-def build(clean: bool = True) -> Path:
+def build() -> Path:
     check_env()
 
-    if BUILD_DIR.exists() and clean:
-        shutil.rmtree(BUILD_DIR, ignore_errors=True)
+    # 不整体删 build 目录：文件数一多会撞上沙箱的批量删除保护，
+    # 而且 PyInstaller 自己会覆盖，留着还能让重复打包快一点
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -175,7 +182,6 @@ def build(clean: bool = True) -> Path:
         "--onefile",                 # 单文件，方便整个拷走
         "--console",                 # 留个窗口显示访问地址，老师要照着念给对方
         "--noconfirm",
-        "--clean",
         "--name", EXE_NAME,
         "--distpath", str(DIST_DIR),
         "--workpath", str(BUILD_DIR),
