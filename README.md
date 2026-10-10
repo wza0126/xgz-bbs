@@ -135,10 +135,13 @@ xgz-bbs/
 ## 自检
 
 ```bash
+# 建库 / 老库升级（不需要起服务，临时目录跑，不碰 data/）
+python tools/check_migrate.py                           # 16 项：老库能否原地升级、老数据会不会丢
+
 # 本地 / 演示环境（会写数据，先复位）
 python tools/seed_demo.py --reset
 python tools/smoke_test.py                              # 全站冒烟 421 项，需先启动服务
-python tools/check_flows.py                             # 任务状态机 / 楼中楼 / 回收站 回归 64 项，需先启动服务
+python tools/check_flows.py                             # 任务状态机 / 楼中楼 / 回收站 回归 64 项，需先启动服务（默认打 8300）
 
 # 线上（已有真实数据）——只读 + 隔离账号，绝不碰真实内容
 BBS_SMOKE_BASE=http://192.168.10.201:8009 BBS_ADMIN_PASSWORD=<admin密码> \
