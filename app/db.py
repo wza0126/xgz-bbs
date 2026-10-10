@@ -75,6 +75,16 @@ _ADDED_COLUMNS = [
     # (表, 列, 定义)   —— 富文本正文：老数据一律 'text'，保持原样显示
     ("topics", "body_format", "TEXT NOT NULL DEFAULT 'text'"),
     ("posts", "body_format", "TEXT NOT NULL DEFAULT 'text'"),
+    # 回收站：软删除标记 + 删除时间/人。老库补列，已有行默认「没删」，
+    # 于是升级后历史内容一条不少，回收站里也是空的。
+    ("topics", "is_deleted", "INTEGER NOT NULL DEFAULT 0"),
+    ("topics", "deleted_at", "INTEGER"),
+    ("topics", "deleted_by", "INTEGER"),
+    ("posts", "deleted_at", "INTEGER"),
+    ("posts", "deleted_by", "INTEGER"),
+    ("attachments", "is_deleted", "INTEGER NOT NULL DEFAULT 0"),
+    ("attachments", "deleted_at", "INTEGER"),
+    ("attachments", "deleted_by", "INTEGER"),
 ]
 
 

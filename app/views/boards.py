@@ -199,12 +199,15 @@ def files(board_id):
     """课题组文件库：按时间列出全部附件。"""
     page = max(int(request.args.get("page", 1) or 1), 1)
     per_page = 40
-    total = dbm.scalar("SELECT COUNT(*) FROM attachments WHERE board_id = ?", (board_id,), 0)
+    total = dbm.scalar(
+        f"SELECT COUNT(*) FROM attachments a WHERE a.board_id = ? AND {utils.ATT_VISIBLE_SQL}",
+        (board_id,), 0)
     items = dbm.rows(
         "SELECT a.*, u.display_name, t.title AS topic_title, t.id AS topic_id"
         " FROM attachments a JOIN users u ON u.id = a.owner_id"
         " LEFT JOIN topics t ON (a.attachable_type = 'topic' AND t.id = a.attachable_id)"
-        " WHERE a.board_id = ? ORDER BY a.created_at DESC LIMIT ? OFFSET ?",
+        f" WHERE a.board_id = ? AND {utils.ATT_VISIBLE_SQL}"
+        " ORDER BY a.created_at DESC LIMIT ? OFFSET ?",
         (board_id, per_page, (page - 1) * per_page))
     pages = max((total + per_page - 1) // per_page, 1)
     return render_template("board_files.html", board=g.board, items=items,

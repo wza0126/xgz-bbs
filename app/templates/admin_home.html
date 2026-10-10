@@ -15,12 +15,14 @@
     <div class="metric"><div class="n">{{ stats.tasks }}</div><div class="l">任务</div></div>
     <div class="metric"><div class="n">{{ stats.files }}</div><div class="l">附件</div></div>
     <div class="metric"><div class="n">{{ stats.bytes | size }}</div><div class="l">附件占用</div></div>
+    <div class="metric"><div class="n">{{ trash.topics + trash.posts + trash.attachments }}</div><div class="l">回收站</div></div>
   </div>
   <div class="row gap8 top-gap">
     <a class="btn pri" href="{{ url_for('admin.users') }}">账号管理</a>
     <a class="btn" href="{{ url_for('admin.import_users') }}">批量导入</a>
     <a class="btn" href="{{ url_for('admin.boards') }}">课题组总览</a>
     <a class="btn" href="{{ url_for('admin.kinds') }}">类型标签</a>
+    <a class="btn" href="{{ url_for('trash.admin_trash') }}">回收站</a>
   </div>
 </section>
 

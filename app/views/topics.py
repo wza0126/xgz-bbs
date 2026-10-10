@@ -139,7 +139,8 @@ def _split_floors(posts):
 @authm.login_required
 def detail(topic_id):
     topic = models.topic_detail(topic_id)
-    if topic is None:
+    if topic is None or topic["is_deleted"]:
+        # 进回收站的话题当 404 处理：链接失效，但内容其实还在，可由组长恢复
         abort(404)
     user = authm.current_user()
     dbm.execute("UPDATE topics SET view_count = view_count + 1 WHERE id = ?", (topic_id,))
@@ -230,7 +231,7 @@ def reply(topic_id):
 
 def _topic_or_404(topic_id):
     topic = models.topic_detail(topic_id)
-    if topic is None:
+    if topic is None or topic["is_deleted"]:
         abort(404)
     return topic
 
@@ -315,15 +316,22 @@ def edit(topic_id):
 @authm.board_visible_required
 @authm.board_role_required("leader")
 def delete(topic_id):
+    """删话题 = 进回收站（软删除）。
+
+    不真删库、不删附件文件、也不逐个标记它下面的回复 —— 整个话题作为一个整体
+    进出：话题 is_deleted 置 1 之后，它的回复、任务、附件全都查不到了（列表、
+    详情、搜索、下载都按这个口径过滤）；组长在回收站里点一下就原样恢复。
+    """
     topic = _topic_or_404(topic_id)
-    for att in dbm.rows("SELECT * FROM attachments WHERE board_id = ? AND ("
-                        "(attachable_type = 'topic' AND attachable_id = ?) OR"
-                        "(attachable_type = 'post' AND attachable_id IN"
-                        " (SELECT id FROM posts WHERE topic_id = ?)))",
-                        (topic["board_id"], topic_id, topic_id)):
-        utils.delete_attachment(att)
-    dbm.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
-    flash("话题已删除", "ok")
+    user = authm.current_user()
+    dbm.execute("UPDATE topics SET is_deleted = 1, deleted_at = ?, deleted_by = ? WHERE id = ?",
+                (dbm.now_ts(), user["id"], topic_id))
+    if topic["author_id"] != user["id"]:
+        utils.notify([topic["author_id"]], actor_id=user["id"], kind="topic",
+                     summary=f"你的话题「{topic['title']}」被移入回收站",
+                     link=url_for("boards.detail", board_id=topic["board_id"]),
+                     board_id=topic["board_id"], topic_id=topic_id)
+    flash("话题已移入回收站；组长可在「回收站」里随时恢复。", "ok")
     return redirect(url_for("boards.detail", board_id=topic["board_id"]))
 
 
@@ -337,10 +345,11 @@ def delete_post(post_id):
     user = authm.current_user()
     if post["author_id"] != user["id"] and not authm.is_leader(user, post["board_id"]):
         abort(403)
-    for att in dbm.rows("SELECT * FROM attachments WHERE attachable_type = 'post' AND attachable_id = ?",
-                        (post_id,)):
-        utils.delete_attachment(att)
-    dbm.execute("UPDATE posts SET is_deleted = 1, body = '' WHERE id = ?", (post_id,))
+    # 软删除：正文和附件都留着，进回收站可以恢复。
+    # 附件不在这里单独标记 —— 回复一删，它的附件就跟着宿主一起不可见了；
+    # 恢复这条回复时附件自然回来。真要清干净得在回收站里做「彻底删除」。
+    dbm.execute("UPDATE posts SET is_deleted = 1, deleted_at = ?, deleted_by = ? WHERE id = ?",
+                (dbm.now_ts(), user["id"], post_id))
     dbm.execute("UPDATE topics SET reply_count = MAX(reply_count - 1, 0) WHERE id = ?", (post["tid"],))
 
     # 删掉的如果正好是某位组员的任务提交，状态得跟着退回来。

@@ -8,13 +8,15 @@
      ON DELETE SET NULL 对软删除不生效，状态没跟着退回来）
   2. 重新提交时把新内容写回那条已经废掉的帖子上，于是「交了也看不见」
   3. 父帖被删后，挂在它下面的楼中楼回复跟着一起消失
+  4. 删除改成「进回收站」之后，任何一处查询漏了 is_deleted 过滤，
+     删掉的内容就会从列表、搜索或下载里冒出来
 
 用法（先起服务、准备好演示数据）：
     BBS_DATA_DIR=D:/tmp/x  python tools/seed_demo.py --reset
     python server.py --port 8300 --data-dir D:/tmp/x --host 127.0.0.1
     BBS_TEST_BASE=http://127.0.0.1:8300 BBS_DATA_DIR=D:/tmp/x python tools/check_flows.py
 
-会往库里写东西（一个任务提交、一个临时话题），所以**别对着线上跑**。
+会往库里写东西（任务提交、临时话题、一条附件记录），所以**别对着线上跑**。
 """
 import http.cookiejar
 import os
@@ -153,8 +155,10 @@ def case_submit_and_delete(c, t, asg, leader):
     check("B：评分/评语/审核痕迹一起清掉",
           row["score"] is None and row["reviewed_by"] is None and row["reviewed_at"] is None
           and (row["review_note"] or "") == "", dict(row))
-    p = c.execute("SELECT is_deleted, body FROM posts WHERE id = ?", (sid,)).fetchone()
-    check("B：旧提交帖被软删且正文清空", p["is_deleted"] == 1 and (p["body"] or "") == "", dict(p))
+    p = c.execute("SELECT is_deleted, body, deleted_at, deleted_by FROM posts WHERE id = ?",
+                  (sid,)).fetchone()
+    check("B：旧提交帖被软删、正文保留（进回收站还能恢复）",
+          p["is_deleted"] == 1 and p["body"] == mark1 and p["deleted_at"] is not None, dict(p))
     n = c.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND summary LIKE '%撤回%'",
                   (asg["user_id"],)).fetchone()[0]
     check("B：提交人收到「被撤回」通知", n >= 1, n)
@@ -272,6 +276,112 @@ def case_confirm_wiring(c, t, leader, board):
           code == 200 and 'data-confirm=' in html and 'id="confirmModal"' in html, "code=%s" % code)
 
 
+def case_trash(c, t, leader, board, mem):
+    """回收站：话题整体进出、回复单独进出、附件跟随宿主、彻底删除、权限。
+
+    这是「删除 = 软删除」这套机制的回归 —— 一旦哪天有人把删改回真删，
+    或者某条查询漏了 is_deleted 过滤，这里就会红。
+    """
+    up = DATA / "uploads" / "2026" / "10"
+    up.mkdir(parents=True, exist_ok=True)
+    fname = "trash-%s.txt" % TAG
+    fpath = up / fname
+    fpath.write_text("回收站附件夹具", encoding="utf-8")
+
+    tmark = "TRASHT-%s" % TAG
+    rmark = "TRASHREPLY-%s" % TAG
+    mem.post("/b/%d/new" % board, {"kind": "discussion", "title": tmark,
+                                   "body": "回收站用例宿主", "body_format": "text"})
+    row = c.execute("SELECT id FROM topics WHERE title = ?", (tmark,)).fetchone()
+    if row is None:
+        check("回收站：新建话题成功", False, "没建出来，后面的用例跳过")
+        return
+    tid = row["id"]
+    mem.post("/t/%d/reply" % tid, {"body": rmark, "body_format": "text"})
+    pid = c.execute("SELECT id FROM posts WHERE topic_id = ? AND body = ?",
+                    (tid, rmark)).fetchone()["id"]
+    owner = c.execute("SELECT author_id FROM posts WHERE id = ?", (pid,)).fetchone()["author_id"]
+    # 直接塞一条附件记录（连同磁盘文件），省得在测试里拼 multipart
+    aid = c.execute(
+        "INSERT INTO attachments (owner_id, board_id, attachable_type, attachable_id,"
+        " orig_name, stored_path, ext, mime, size_bytes, sha256, created_at)"
+        " VALUES (?,?,'post',?,?,?,?,?,?,?,?)",
+        (owner, board, pid, "回收站夹具.txt", "2026/10/" + fname, "txt",
+         "text/plain", 21, "x", 1)).lastrowid
+    c.commit()
+
+    ld = Client()
+    check("回收站：组长登录", ld.login(leader["username"], PW))
+    code, _ = mem.get("/b/%d/trash" % board)
+    check("回收站：组员访问被拒（403）", code == 403, code)
+
+    # ---- 附件是跟着宿主的：回复一删，附件也下不了 ----
+    code, html = ld.get("/t/%d" % tid)
+    check("回收站：删前附件在页面上", "回收站夹具.txt" in html)
+    check("回收站：删前附件可下载", ld.get("/f/%d" % aid)[0] == 200)
+
+    ld.post("/p/%d/delete" % pid, {})
+    code, html = ld.get("/t/%d" % tid)
+    check("回收站：删回复后讨论区看不到", rmark not in html)
+    check("回收站：删回复后附件跟着隐藏", "回收站夹具.txt" not in html)
+    check("回收站：删回复后附件下载 404", ld.get("/f/%d" % aid)[0] == 404)
+    p = c.execute("SELECT is_deleted, body, deleted_at FROM posts WHERE id = ?", (pid,)).fetchone()
+    check("回收站：回复软删、正文保留",
+          p["is_deleted"] == 1 and p["body"] == rmark and p["deleted_at"], dict(p))
+    code, html = ld.get("/b/%d/trash" % board)
+    check("回收站：回复出现在回收站列表", rmark in html)
+
+    # ---- 恢复回复 = 附件一起回来 ----
+    ld.post("/trash/post/%d/restore" % pid, {})
+    code, html = ld.get("/t/%d" % tid)
+    check("回收站：回复已恢复", rmark in html)
+    check("回收站：附件跟着回来", "回收站夹具.txt" in html)
+    check("回收站：附件又能下载", ld.get("/f/%d" % aid)[0] == 200)
+
+    # ---- 单独删附件 ----
+    ld.post("/f/%d/delete" % aid, {})
+    check("回收站：单独删的附件 404", ld.get("/f/%d" % aid)[0] == 404)
+    code, html = ld.get("/b/%d/trash" % board)
+    check("回收站：附件出现在回收站列表", "回收站夹具.txt" in html)
+    ld.post("/trash/attach/%d/restore" % aid, {})
+    check("回收站：附件单独恢复成功", ld.get("/f/%d" % aid)[0] == 200)
+
+    # ---- 话题整体进出 ----
+    # 搜索断言只认「结果链接」，别拿标题词去判整页 —— 搜索框会把 q 原样回显，
+    # 词一定在页面里，那样断言必然误报（老坑）。
+    code, html = ld.get("/search?q=%s" % tmark)
+    check("回收站：删前搜得到", ("/t/%d" % tid) in html)
+    ld.post("/t/%d/delete" % tid, {})
+    check("回收站：删话题后详情 404", ld.get("/t/%d" % tid)[0] == 404)
+    code, html = ld.get("/b/%d" % board)
+    check("回收站：删话题后列表里没有它", tmark not in html)
+    code, html = ld.get("/search?q=%s" % tmark)
+    check("回收站：删话题后搜索结果里没有它", ("/t/%d" % tid) not in html)
+    code, html = ld.get("/b/%d/trash" % board)
+    check("回收站：话题出现在回收站列表", tmark in html)
+    row = c.execute("SELECT is_deleted, deleted_at, deleted_by FROM topics WHERE id = ?",
+                    (tid,)).fetchone()
+    check("回收站：话题是软删（记录还在）",
+          row["is_deleted"] == 1 and row["deleted_at"] and row["deleted_by"], dict(row))
+
+    ld.post("/trash/topic/%d/restore" % tid, {})
+    check("回收站：恢复话题后详情可访问", ld.get("/t/%d" % tid)[0] == 200)
+    code, html = ld.get("/t/%d" % tid)
+    check("回收站：恢复话题后讨论与附件都回来",
+          rmark in html and "回收站夹具.txt" in html)
+
+    # ---- 彻底删除：记录 + 磁盘文件一起清 ----
+    ld.post("/t/%d/delete" % tid, {})
+    ld.post("/trash/topic/%d/purge" % tid, {})
+    check("回收站：彻底删除后话题记录没了",
+          c.execute("SELECT COUNT(*) FROM topics WHERE id = ?", (tid,)).fetchone()[0] == 0)
+    check("回收站：彻底删除后回复记录没了",
+          c.execute("SELECT COUNT(*) FROM posts WHERE id = ?", (pid,)).fetchone()[0] == 0)
+    check("回收站：彻底删除后附件记录没了",
+          c.execute("SELECT COUNT(*) FROM attachments WHERE id = ?", (aid,)).fetchone()[0] == 0)
+    check("回收站：彻底删除后磁盘文件没了", not fpath.exists())
+
+
 def main():
     if not DB.exists():
         sys.exit("[夹具] 数据库不存在：%s\n请先跑 tools/seed_demo.py --reset" % DB)
@@ -287,6 +397,8 @@ def main():
     case_orphan(c, t, mem)
     print("\n-- 4. 确认弹窗接线 --")
     case_confirm_wiring(c, t, leader, t["board_id"])
+    print("\n-- 5. 回收站 --")
+    case_trash(c, t, leader, t["board_id"], mem)
 
     print("\n" + "=" * 60)
     print("通过 %d 项，失败 %d 项" % (len(OK), len(BAD)))

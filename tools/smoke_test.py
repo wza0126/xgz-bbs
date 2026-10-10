@@ -755,13 +755,18 @@ post(f"/admin/kinds/{_last_row['id']}/move", {"_csrf": admin_token(), "dir": "do
      200, "再下移回原位")
 assert_true([r["code"] for r in kinds_db()] == _order_before, "下移后顺序复原")
 
-# ⑩ 收尾：把测试话题删掉，那个标签就变成「没人用」了，于是可以真删
-#    （顺带验证上一轮「有内容 → 不许删」不是死结）
+# ⑩ 收尾：把测试话题删掉。注意「删除」现在是**软删除** —— 话题只是进回收站，
+#    记录还在库里、依旧占着这个标签；得再走一步回收站的「彻底删除」，
+#    标签才算真的没人用（顺带验证上一轮「有内容 → 不许删」不是死结）
 if NEW_TID:
     switch_to("zhangls", "123456", "张老师")
     post(f"/t/{NEW_TID}/delete", {"_csrf": csrf_from(get(f"/t/{NEW_TID}", 200)[1])},
-         200, "删除冒烟测试话题")
+         200, "删除冒烟测试话题（进回收站）")
     switch_to("admin", ADMIN_PASSWORD, "管理员")
+    post(f"/admin/kinds/{_made['id']}/delete", {"_csrf": admin_token()},
+         200, "话题还在回收站时删标签（应被拒）")
+    post(f"/trash/topic/{NEW_TID}/purge", {"_csrf": admin_token()},
+         200, "从回收站彻底删除该话题")
     post(f"/admin/kinds/{_made['id']}/delete", {"_csrf": admin_token()},
          200, "话题清空后再删该标签（应成功）")
     assert_true(kind_by_label(f"{LAB_USED}改") is None, "话题清空后标签可以真正删除")
@@ -908,12 +913,16 @@ try:
 except Exception as e:  # noqa: BLE001
     bad.append(("富文本话题的材料导出", 0, str(e)))
 
-# ⑧ 收尾：本次造的三个测试话题全部删掉，库里不留痕迹
+# ⑧ 收尾：本次造的三个测试话题全部删掉，库里不留痕迹。
+#    删除 = 进回收站（软删除），记录还在库里；要再走一步「彻底删除」才算真清干净。
+_tok_rt = csrf_from(get("/plaza", 200)[1])
 for _tid in (RT_TID, XSS_TID, OLD_TID):
     if not _tid:
         continue
     post(f"/t/{_tid}/delete", {"_csrf": csrf_from(get(f"/t/{_tid}", 200)[1])},
-         200, f"删除富文本冒烟话题 #{_tid}")
+         200, f"删除富文本冒烟话题 #{_tid}（进回收站）")
+    post(f"/trash/topic/{_tid}/purge", {"_csrf": _tok_rt},
+         200, f"从回收站彻底删除富文本冒烟话题 #{_tid}")
 _c = _con()
 _left = _c.execute("SELECT COUNT(*) FROM topics WHERE title IN (?,?,?)",
                    (RT_TITLE, RT_XSS_TITLE, RT_OLD_TITLE)).fetchone()[0]
@@ -1056,23 +1065,36 @@ _c.close()
 IMG_ONLY_TID = _io["id"] if _io else None
 assert_true(IMG_ONLY_TID is not None, "只有一张图的正文没被判成空")
 
-# 收尾：删掉这三个话题，图片附件应随话题一起清掉，磁盘文件也不留
+# 收尾：删掉这三个话题。删除只是进回收站（记录和磁盘文件都还在），
+# 要在回收站里「彻底删除」，图片附件才真的从库里和磁盘上清掉。
 _c = _con()
 _img_row = _c.execute("SELECT stored_path FROM attachments WHERE id = ?", (IMG_ID,)).fetchone()
 _c.close()
 IMG_PATH = (DB_PATH.parent / "uploads" / _img_row["stored_path"]) if _img_row else None
 assert_true(bool(IMG_PATH and IMG_PATH.exists()), "图片确实落在 uploads 目录里")
-for _tid in (IMG_TID, IMG_XSS_TID, IMG_ONLY_TID):
-    if _tid:
-        post(f"/t/{_tid}/delete", {"_csrf": csrf_from(get(f"/t/{_tid}", 200)[1])},
-             200, f"删除插图冒烟话题 #{_tid}")
+_tok_img = csrf_from(get("/plaza", 200)[1])
+if IMG_TID:
+    post(f"/t/{IMG_TID}/delete", {"_csrf": csrf_from(get(f"/t/{IMG_TID}", 200)[1])},
+         200, f"删除插图冒烟话题 #{IMG_TID}（进回收站）")
+    _c = _con()
+    _img_still = _c.execute("SELECT COUNT(*) FROM attachments WHERE id = ?", (IMG_ID,)).fetchone()[0]
+    _c.close()
+    assert_true(_img_still == 1 and bool(IMG_PATH and IMG_PATH.exists()),
+                "软删除期间附件记录与图片文件都保留（回收站里可恢复）")
+    post(f"/trash/topic/{IMG_TID}/purge", {"_csrf": _tok_img}, 200, "从回收站彻底删除插图话题")
+for _tid in (IMG_XSS_TID, IMG_ONLY_TID):
+    if not _tid:
+        continue
+    post(f"/t/{_tid}/delete", {"_csrf": csrf_from(get(f"/t/{_tid}", 200)[1])},
+         200, f"删除插图冒烟话题 #{_tid}（进回收站）")
+    post(f"/trash/topic/{_tid}/purge", {"_csrf": _tok_img}, 200, f"彻底删除插图冒烟话题 #{_tid}")
 _c = _con()
 _left_img = _c.execute("SELECT COUNT(*) FROM topics WHERE title IN (?,?,?)",
                        (IMG_TITLE, IMG_XSS_TITLE, IMG_ONLY_TITLE)).fetchone()[0]
 _att_left = _c.execute("SELECT COUNT(*) FROM attachments WHERE id = ?", (IMG_ID,)).fetchone()[0]
 _c.close()
 assert_true(_left_img == 0, "插图自测造的话题已全部清掉", f"还剩 {_left_img} 个")
-assert_true(_att_left == 0, "删话题时图片附件记录一起清掉")
+assert_true(_att_left == 0, "彻底删除话题后图片附件记录一起清掉")
 assert_true(bool(IMG_PATH and not IMG_PATH.exists()), "图片文件也从 uploads 里删掉了")
 
 print("=" * 66)

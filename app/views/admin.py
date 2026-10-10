@@ -37,23 +37,29 @@ def _usable_admins():
 @bp.route("/")
 @authm.admin_required
 def home():
+    # 概览一律按「当前还在的内容」口径：回收站里的不进这些数字，
+    # 单独有一行「回收站」指标显示被删了多少。
     stats = dbm.row(
         "SELECT"
         " (SELECT COUNT(*) FROM users WHERE is_active = 1) AS users,"
         " (SELECT COUNT(*) FROM boards WHERE is_archived = 0) AS boards,"
-        " (SELECT COUNT(*) FROM topics) AS topics,"
-        " (SELECT COUNT(*) FROM posts WHERE is_deleted = 0) AS posts,"
-        " (SELECT COUNT(*) FROM tasks) AS tasks,"
-        " (SELECT COUNT(*) FROM attachments) AS files,"
-        " (SELECT COALESCE(SUM(size_bytes), 0) FROM attachments) AS bytes")
+        " (SELECT COUNT(*) FROM topics WHERE is_deleted = 0) AS topics,"
+        " (SELECT COUNT(*) FROM posts p JOIN topics t ON t.id = p.topic_id"
+        "    WHERE p.is_deleted = 0 AND t.is_deleted = 0) AS posts,"
+        " (SELECT COUNT(*) FROM tasks k JOIN topics t ON t.id = k.topic_id"
+        "    WHERE t.is_deleted = 0) AS tasks,"
+        " (SELECT COUNT(*) FROM attachments WHERE is_deleted = 0) AS files,"
+        " (SELECT COALESCE(SUM(size_bytes), 0) FROM attachments WHERE is_deleted = 0) AS bytes")
+    trash = models.trash_counts()
     biggest = dbm.rows(
         "SELECT b.id, b.name, COUNT(a.id) AS n, COALESCE(SUM(a.size_bytes), 0) AS bytes"
-        " FROM boards b LEFT JOIN attachments a ON a.board_id = b.id"
+        " FROM boards b LEFT JOIN attachments a ON a.board_id = b.id AND a.is_deleted = 0"
         " GROUP BY b.id ORDER BY bytes DESC LIMIT 8")
     last_logins = dbm.rows(
         "SELECT username, display_name, subject, last_login_at FROM users WHERE is_active = 1"
         " ORDER BY (last_login_at IS NULL), last_login_at DESC LIMIT 10")
-    return render_template("admin_home.html", stats=stats, biggest=biggest, last_logins=last_logins)
+    return render_template("admin_home.html", stats=stats, biggest=biggest,
+                           last_logins=last_logins, trash=trash)
 
 
 @bp.route("/users")
@@ -419,9 +425,10 @@ def boards():
     rows = dbm.rows(
         "SELECT b.*, u.display_name AS owner_name,"
         " (SELECT COUNT(*) FROM board_members m WHERE m.board_id = b.id) AS member_count,"
-        " (SELECT COUNT(*) FROM topics t WHERE t.board_id = b.id) AS topic_count,"
-        " (SELECT COUNT(*) FROM tasks k WHERE k.board_id = b.id) AS task_count,"
-        " (SELECT COUNT(*) FROM attachments a WHERE a.board_id = b.id) AS file_count"
+        " (SELECT COUNT(*) FROM topics t WHERE t.board_id = b.id AND t.is_deleted = 0) AS topic_count,"
+        " (SELECT COUNT(*) FROM tasks k JOIN topics t ON t.id = k.topic_id"
+        "    WHERE k.board_id = b.id AND t.is_deleted = 0) AS task_count,"
+        " (SELECT COUNT(*) FROM attachments a WHERE a.board_id = b.id AND a.is_deleted = 0) AS file_count"
         " FROM boards b JOIN users u ON u.id = b.owner_id ORDER BY b.is_archived, b.id DESC")
     return render_template("admin_boards.html", rows=rows,
                            users=dbm.rows("SELECT id, username, display_name FROM users"

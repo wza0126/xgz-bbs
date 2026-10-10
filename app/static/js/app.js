@@ -226,7 +226,7 @@
   document.querySelectorAll('[data-del-att]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var id = btn.getAttribute('data-del-att');
-      bbsConfirm('删除这个附件？删除后无法恢复。如果正文里引用过它，插图会变成空图。',
+      bbsConfirm('删除这个附件？它会先进回收站，由组长或管理员恢复。',
                  { title: '删除附件', okText: '删除' }).then(function (ok) {
         if (!ok) { return; }
         fetch('/f/' + id + '/delete', {

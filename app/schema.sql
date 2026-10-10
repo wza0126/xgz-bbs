@@ -71,10 +71,14 @@ CREATE TABLE IF NOT EXISTS topics (
     reply_count    INTEGER NOT NULL DEFAULT 0,
     last_reply_at  INTEGER,
     last_reply_uid INTEGER,
+    is_deleted     INTEGER NOT NULL DEFAULT 0,          -- 回收站：1 = 已删（软删除，可恢复）
+    deleted_at     INTEGER,                             -- 进回收站的时间
+    deleted_by     INTEGER REFERENCES users(id),        -- 谁删的
     created_at     INTEGER NOT NULL,
     updated_at     INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_topics_board ON topics(board_id, is_pinned DESC, COALESCE(last_reply_at, created_at) DESC);
+CREATE INDEX IF NOT EXISTS idx_topics_deleted ON topics(board_id, is_deleted, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_topics_author ON topics(author_id);
 
 -- ---------- 回复（parent_id 支持楼中楼）----------
@@ -86,11 +90,14 @@ CREATE TABLE IF NOT EXISTS posts (
     floor_no   INTEGER NOT NULL DEFAULT 0,
     body       TEXT    NOT NULL DEFAULT '',
     body_format TEXT   NOT NULL DEFAULT 'text',          -- text | html（富文本，见 app/richtext.py）
-    is_deleted INTEGER NOT NULL DEFAULT 0,
+    is_deleted INTEGER NOT NULL DEFAULT 0,              -- 回收站：1 = 已删（正文保留，可恢复）
+    deleted_at INTEGER,
+    deleted_by INTEGER REFERENCES users(id),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_posts_topic ON posts(topic_id, floor_no);
+CREATE INDEX IF NOT EXISTS idx_posts_deleted ON posts(is_deleted, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_posts_parent ON posts(parent_id);
 
 -- ---------- 任务（话题的 1:1 扩展）----------
@@ -140,9 +147,13 @@ CREATE TABLE IF NOT EXISTS attachments (
     size_bytes      INTEGER NOT NULL DEFAULT 0,
     sha256          TEXT    NOT NULL DEFAULT '',
     download_count  INTEGER NOT NULL DEFAULT 0,
+    is_deleted      INTEGER NOT NULL DEFAULT 0,          -- 回收站：1 = 已删（文件仍留在磁盘，可恢复）
+    deleted_at      INTEGER,
+    deleted_by      INTEGER REFERENCES users(id),
     created_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_att_target ON attachments(attachable_type, attachable_id);
+CREATE INDEX IF NOT EXISTS idx_att_deleted ON attachments(board_id, is_deleted, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_att_board ON attachments(board_id);
 CREATE INDEX IF NOT EXISTS idx_att_owner ON attachments(owner_id);
 

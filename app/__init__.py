@@ -46,7 +46,7 @@ def create_app():
     app.teardown_appcontext(dbm.close_db)
 
     # ---------- 蓝图 ----------
-    from .views import admin, auth, boards, files, notify, search, tasks, topics
+    from .views import admin, auth, boards, files, notify, search, tasks, topics, trash
     app.register_blueprint(auth.bp)
     app.register_blueprint(boards.bp)
     app.register_blueprint(topics.bp)
@@ -55,6 +55,7 @@ def create_app():
     app.register_blueprint(notify.bp)
     app.register_blueprint(search.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(trash.bp)
 
     # ---------- 每个请求加载当前用户 ----------
     @app.before_request

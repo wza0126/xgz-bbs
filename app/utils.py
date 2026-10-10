@@ -130,6 +130,19 @@ def safe_tag(text: str, limit=40) -> str:
 
 # ---------- 附件 ----------
 
+# 附件的「可见」条件（拼进 WHERE，别名固定为 a）：
+#   ① 附件自己没被软删；
+#   ② 宿主（话题 / 回复）也没被软删 —— 话题或回复进了回收站之后，它名下的
+#      附件即使记录还在，也不该再能下载、或在任何列表/搜索里冒出来。
+ATT_VISIBLE_SQL = (
+    "a.is_deleted = 0"
+    " AND NOT (a.attachable_type = 'topic' AND EXISTS ("
+    "     SELECT 1 FROM topics t2 WHERE t2.id = a.attachable_id AND t2.is_deleted = 1))"
+    " AND NOT (a.attachable_type = 'post' AND EXISTS ("
+    "     SELECT 1 FROM posts p2 WHERE p2.id = a.attachable_id AND p2.is_deleted = 1))"
+)
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -194,6 +207,41 @@ def delete_attachment(att, remove_file=True):
             pass
 
 
+# ---------- 回收站的「彻底删除」----------
+# 上面 delete_attachment 是单个附件的真删除；下面三个是整块清干净，
+# 只在回收站里点「彻底删除」时才会走到 —— 一旦执行就真的找不回来了。
+
+def purge_topic(topic_id) -> int:
+    """彻底删除一个话题：先真删它名下的附件（记录 + 磁盘文件），再删话题本身
+    （posts / tasks / task_assignees 由外键 CASCADE 一起走）。返回删掉的附件数。"""
+    atts = dbm.rows(
+        "SELECT * FROM attachments WHERE"
+        " (attachable_type = 'topic' AND attachable_id = ?)"
+        " OR (attachable_type = 'post' AND attachable_id IN"
+        "     (SELECT id FROM posts WHERE topic_id = ?))",
+        (topic_id, topic_id))
+    for a in atts:
+        delete_attachment(a)
+    dbm.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+    return len(atts)
+
+
+def purge_post(post_id) -> int:
+    """彻底删除一条回复。先把挂在它下面的楼中楼提到顶层 —— 外键是
+    ON DELETE CASCADE，不先松绑的话删父帖会把它下面的回复一起带走。"""
+    dbm.execute("UPDATE posts SET parent_id = NULL WHERE parent_id = ?", (post_id,))
+    atts = dbm.rows("SELECT * FROM attachments WHERE attachable_type = 'post'"
+                    " AND attachable_id = ?", (post_id,))
+    for a in atts:
+        delete_attachment(a)
+    dbm.execute("DELETE FROM posts WHERE id = ?", (post_id,))
+    return len(atts)
+
+
+def purge_attachment(att) -> None:
+    delete_attachment(att)
+
+
 def attachments_for(attachable_type, ids):
     """按 attachable_id 批量取附件，返回 {id: [att, ...]}。"""
     if not ids:
@@ -201,7 +249,8 @@ def attachments_for(attachable_type, ids):
     marks = ",".join("?" * len(ids))
     rs = dbm.rows(
         f"SELECT a.*, u.display_name FROM attachments a JOIN users u ON u.id = a.owner_id"
-        f" WHERE a.attachable_type = ? AND a.attachable_id IN ({marks}) ORDER BY a.id",
+        f" WHERE a.attachable_type = ? AND a.attachable_id IN ({marks})"
+        f" AND {ATT_VISIBLE_SQL} ORDER BY a.id",
         tuple([attachable_type] + list(ids)),
     )
     out = {}
@@ -273,9 +322,10 @@ def export_board_zip(board_id: int, mode: str = "all"):
     zip_name = f"{stem}-{stamp}{'-附件包' if mode == 'files' else ''}.zip"
     zip_path = export_dir / f"{board_id}-{uuid.uuid4().hex[:8]}.zip"
 
+    # 导出的是「当前还在」的材料：回收站里的东西不该混进结题包
     topics = dbm.rows(
         "SELECT t.*, u.display_name AS author_name FROM topics t JOIN users u ON u.id = t.author_id"
-        " WHERE t.board_id = ? ORDER BY t.created_at", (board_id,))
+        " WHERE t.board_id = ? AND t.is_deleted = 0 ORDER BY t.created_at", (board_id,))
     topic_ids = [t["id"] for t in topics]
     posts_map = {}
     if topic_ids:

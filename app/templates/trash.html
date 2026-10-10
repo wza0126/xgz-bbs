@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, kind_tag with context %}
+{% block title %}回收站{% endblock %}
+
+{% block content %}
+<div class="crumb">
+  <a href="{{ url_for('boards.home') }}">课题组广场</a> /
+  {% if scope == 'board' %}
+  <a href="{{ url_for('boards.detail', board_id=board.id) }}">{{ board.name }}</a> /
+  {% endif %}
+  回收站
+</div>
+
+{% set total = counts.topics + counts.posts + counts.attachments %}
+
+<section class="card">
+  <div class="row gap8">
+    <h1 class="grow">回收站{% if scope == 'board' %} · {{ board.name }}{% else %} · 全站{% endif %}</h1>
+    {% if total %}
+      {% if scope == 'board' %}
+      <form method="post" action="{{ url_for('trash.board_empty', board_id=board.id) }}" class="inline-form"
+            data-confirm="清空本组回收站：这 {{ total }} 项会被彻底删除，磁盘文件一起清掉，之后再也恢复不了。"
+            data-confirm-title="清空回收站" data-confirm-ok="全部彻底删除"
+            onsubmit="return confirm('清空后无法恢复，确定吗？')">
+        {{ csrf() }}<button class="btn sm danger">清空回收站</button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ url_for('trash.admin_empty') }}" class="inline-form"
+            data-confirm="清空全站回收站：这 {{ total }} 项会被彻底删除，磁盘文件一起清掉，之后再也恢复不了。"
+            data-confirm-title="清空全站回收站" data-confirm-ok="全部彻底删除"
+            onsubmit="return confirm('清空后无法恢复，确定吗？')">
+        {{ csrf() }}<button class="btn sm danger">清空全站回收站</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="trash-note">
+    删除的内容先放在这里，组长和管理员随时能恢复；只有点「彻底删除」（或清空回收站）才会真的清掉文件。
+    话题是整体进出的 —— 恢复一个话题，它下面的讨论、任务和附件都会一起回来。
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="n">{{ counts.topics }}</div><div class="l">话题</div></div>
+    <div class="metric"><div class="n">{{ counts.posts }}</div><div class="l">回复</div></div>
+    <div class="metric"><div class="n">{{ counts.attachments }}</div><div class="l">附件</div></div>
+  </div>
+</section>
+
+{# ---------------- 话题 ---------------- #}
+<section class="card">
+  <h2>话题（{{ counts.topics }}）</h2>
+  {% if topics %}
+  <div class="tlist">
+    {% for t in topics %}
+    <div class="trow">
+      <div class="main">
+        <div class="ttl">
+          {{ kind_tag(t.kind) }} {{ t.title }}
+          {% if scope == 'all' %}<span class="tag t-c-soft">{{ t.board_name }}</span>{% endif %}
+        </div>
+        <div class="tmeta">
+          <span>{{ t.author_name }} 发布</span>
+          <span>{% if t.deleted_at %}{{ rel_time(t.deleted_at) }} · {% endif %}由 {{ t.deleter_name or '管理员' }} 删除</span>
+          <span>恢复后带回 {{ t.live_replies }} 条回复 · {{ t.live_files }} 个附件</span>
+        </div>
+      </div>
+      <div class="acts">
+        <form method="post" action="{{ url_for('trash.topic_restore', topic_id=t.id) }}" class="inline-form">
+          {% if scope == 'all' %}<input type="hidden" name="back" value="admin">{% endif %}
+          {{ csrf() }}<button class="btn xs pri">恢复</button>
+        </form>
+        <form method="post" action="{{ url_for('trash.topic_purge', topic_id=t.id) }}" class="inline-form"
+              data-confirm="彻底删除「{{ t.title }}」？连同它下面的讨论、任务和全部附件一起清掉，永远恢复不了。"
+              data-confirm-title="彻底删除话题" data-confirm-ok="彻底删除"
+              onsubmit="return confirm('彻底删除后无法恢复，确定吗？')">
+          {% if scope == 'all' %}<input type="hidden" name="back" value="admin">{% endif %}
+          {{ csrf() }}<button class="btn xs danger">彻底删除</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">没有已删的话题。</p>{% endif %}
+</section>
+
+{# ---------------- 回复 ---------------- #}
+<section class="card">
+  <h2>回复（{{ counts.posts }}）</h2>
+  {% if posts %}
+  <div class="tlist">
+    {% for p in posts %}
+    <div class="trow">
+      <div class="main">
+        <div class="ttl">
+          {% if p.parent_id %}<span class="tag t-c-soft">楼中楼</span>{% endif %}
+          {{ p.display_name }} · 在「{{ p.topic_title }}」里
+          {% if scope == 'all' %}<span class="tag t-c-soft">{{ p.board_name }}</span>{% endif %}
+        </div>
+        <div class="snip">{{ to_plain(p.body, p.body_format) | truncate(70) or '（只有附件，没有文字）' }}</div>
+        <div class="tmeta">
+          <span>{% if p.deleted_at %}{{ rel_time(p.deleted_at) }} · {% endif %}由 {{ p.deleter_name or '管理员' }} 删除</span>
+          {% if p.live_children %}<span>下面还挂着 {{ p.live_children }} 条回复</span>{% endif %}
+        </div>
+      </div>
+      <div class="acts">
+        <form method="post" action="{{ url_for('trash.post_restore', post_id=p.id) }}" class="inline-form">
+          {% if scope == 'all' %}<input type="hidden" name="back" value="admin">{% endif %}
+          {{ csrf() }}<button class="btn xs pri">恢复</button>
+        </form>
+        <form method="post" action="{{ url_for('trash.post_purge', post_id=p.id) }}" class="inline-form"
+              data-confirm="彻底删除这条回复？下面挂着的楼中楼会被提到上一层保留，万无一失；但这条回复本身再也回不来了。"
+              data-confirm-title="彻底删除回复" data-confirm-ok="彻底删除"
+              onsubmit="return confirm('彻底删除后无法恢复，确定吗？')">
+          {% if scope == 'all' %}<input type="hidden" name="back" value="admin">{% endif %}
+          {{ csrf() }}<button class="btn xs danger">彻底删除</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">没有已删的回复。</p>{% endif %}
+</section>
+
+{# ---------------- 附件 ---------------- #}
+<section class="card">
+  <h2>附件（{{ counts.attachments }}）</h2>
+  {% if attachments %}
+  <div class="tlist">
+    {% for a in attachments %}
+    <div class="trow">
+      <div class="main">
+        <div class="ttl"><span class="fic">{{ file_badge(a.ext) }}</span> {{ a.orig_name }}</div>
+        <div class="tmeta">
+          <span>{{ a.display_name }} 上传 · {{ a.size_bytes | size }}</span>
+          {% if a.topic_title %}<span>来自「{{ a.topic_title }}」</span>{% endif %}
+          {% if scope == 'all' %}<span>{{ a.board_name }}</span>{% endif %}
+          <span>{% if a.deleted_at %}{{ rel_time(a.deleted_at) }} · {% endif %}由 {{ a.deleter_name or '管理员' }} 删除</span>
+        </div>
+      </div>
+      <div class="acts">
+        <form method="post" action="{{ url_for('trash.attach_restore', attach_id=a.id) }}" class="inline-form">
+          {% if scope == 'all' %}<input type="hidden" name="back" value="admin">{% endif %}
+          {{ csrf() }}<button class="btn xs pri">恢复</button>
+        </form>
+        <form method="post" action="{{ url_for('trash.attach_purge', attach_id=a.id) }}" class="inline-form"
+              data-confirm="彻底删除附件「{{ a.orig_name }}」？磁盘上的文件也会删掉，永远恢复不了。"
+              data-confirm-title="彻底删除附件" data-confirm-ok="彻底删除"
+              onsubmit="return confirm('彻底删除后无法恢复，确定吗？')">
+          {% if scope == 'all' %}<input type="hidden" name="back" value="admin">{% endif %}
+          {{ csrf() }}<button class="btn xs danger">彻底删除</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">没有已删的附件。</p>{% endif %}
+</section>
+{% endblock %}

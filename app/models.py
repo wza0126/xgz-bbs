@@ -9,10 +9,11 @@ def my_boards(user_id, scope="all"):
     base = (
         "SELECT b.*, u.display_name AS owner_name,"
         " (SELECT role FROM board_members m WHERE m.board_id = b.id AND m.user_id = ?) AS my_role,"
-        " (SELECT COUNT(*) FROM topics t WHERE t.board_id = b.id) AS topic_count,"
+        " (SELECT COUNT(*) FROM topics t WHERE t.board_id = b.id AND t.is_deleted = 0) AS topic_count,"
         " (SELECT COUNT(*) FROM tasks k WHERE k.board_id = b.id) AS task_count,"
         " (SELECT COUNT(*) FROM board_members m WHERE m.board_id = b.id) AS member_count,"
-        " (SELECT MAX(COALESCE(t.last_reply_at, t.created_at)) FROM topics t WHERE t.board_id = b.id) AS last_active"
+        " (SELECT MAX(COALESCE(t.last_reply_at, t.created_at)) FROM topics t"
+        "    WHERE t.board_id = b.id AND t.is_deleted = 0) AS last_active"
         " FROM boards b JOIN users u ON u.id = b.owner_id"
         " WHERE b.is_archived = 0"
     )
@@ -29,14 +30,17 @@ def my_boards(user_id, scope="all"):
 def board_stats(board_id):
     r = dbm.row(
         "SELECT"
-        " (SELECT COUNT(*) FROM topics WHERE board_id = ?) AS topics,"
-        " (SELECT COUNT(*) FROM tasks  WHERE board_id = ?) AS tasks,"
-        " (SELECT COUNT(*) FROM attachments WHERE board_id = ?) AS files,"
+        " (SELECT COUNT(*) FROM topics WHERE board_id = ? AND is_deleted = 0) AS topics,"
+        " (SELECT COUNT(*) FROM tasks k JOIN topics t ON t.id = k.topic_id"
+        "    WHERE k.board_id = ? AND t.is_deleted = 0) AS tasks,"
+        " (SELECT COUNT(*) FROM attachments WHERE board_id = ? AND is_deleted = 0) AS files,"
         " (SELECT COUNT(*) FROM board_members WHERE board_id = ?) AS members,"
         " (SELECT COUNT(*) FROM task_assignees a JOIN tasks k ON k.id = a.task_id"
-        "    WHERE k.board_id = ?) AS assign_total,"
+        "    JOIN topics t ON t.id = k.topic_id"
+        "    WHERE k.board_id = ? AND t.is_deleted = 0) AS assign_total,"
         " (SELECT COUNT(*) FROM task_assignees a JOIN tasks k ON k.id = a.task_id"
-        "    WHERE k.board_id = ? AND a.status IN ('done','confirmed')) AS assign_done",
+        "    JOIN topics t ON t.id = k.topic_id"
+        "    WHERE k.board_id = ? AND t.is_deleted = 0 AND a.status IN ('done','confirmed')) AS assign_done",
         (board_id,) * 6,
     )
     d = dict(r) if r else {}
@@ -65,8 +69,9 @@ def board_scoreboard(board_id):
         " SUM(CASE WHEN a.status IN ('done') THEN 1 ELSE 0 END) AS pending"
         " FROM task_assignees a"
         " JOIN tasks k ON k.id = a.task_id"
+        " JOIN topics t ON t.id = k.topic_id"
         " JOIN users u ON u.id = a.user_id"
-        " WHERE k.board_id = ?"
+        " WHERE k.board_id = ? AND t.is_deleted = 0"
         " GROUP BY u.id, u.display_name, u.subject"
         " ORDER BY total_score DESC, confirmed DESC, u.display_name",
         (board_id,),
@@ -74,7 +79,8 @@ def board_scoreboard(board_id):
 
 
 def topic_list(board_id, kind=None, sort="reply", page=1, per_page=20, keyword=None):
-    where = ["t.board_id = ?"]
+    # 回收站里的话题不进列表（t.is_deleted = 0）；kind 计数也走这里，口径一致
+    where = ["t.board_id = ?", "t.is_deleted = 0"]
     args = [board_id]
     if kind in kindsm.codes():
         where.append("t.kind = ?")
@@ -107,6 +113,8 @@ def topic_list(board_id, kind=None, sort="reply", page=1, per_page=20, keyword=N
 
 
 def topic_detail(topic_id):
+    """按 id 取话题（返回里带 is_deleted）。刻意**不过滤**软删：
+    详情页、回收站的恢复/彻底删除都要靠它定位，放不放行交给视图层判断。"""
     return dbm.row(
         "SELECT t.*, u.display_name AS author_name, u.subject AS author_subject"
         " FROM topics t JOIN users u ON u.id = t.author_id WHERE t.id = ?",
@@ -147,6 +155,7 @@ def my_tasks(user_id, scope="open"):
     elif scope == "done":
         where.append("a.status IN ('done','confirmed')")
     where.append("t.status = 'open'")
+    where.append("t.is_deleted = 0")
     return dbm.rows(
         "SELECT a.status, a.score, a.review_note, a.submitted_at,"
         " k.title AS task_title, k.due_date, k.points, k.topic_id, k.board_id,"
@@ -177,7 +186,7 @@ def latest_topics(limit=6, board_ids=None):
         "SELECT t.id, t.title, t.kind, b.name AS board_name, t.created_at,"
         " u.display_name AS author_name"
         " FROM topics t JOIN boards b ON b.id = t.board_id JOIN users u ON u.id = t.author_id"
-        " WHERE b.is_archived = 0"
+        " WHERE b.is_archived = 0 AND t.is_deleted = 0"
     )
     if board_ids:
         marks = ",".join("?" * len(board_ids))
@@ -197,7 +206,7 @@ def recent_replies(limit=6, board_ids=None):
         " b.name AS board_name, u.display_name AS author_name"
         " FROM posts p JOIN topics t ON t.id = p.topic_id JOIN boards b ON b.id = t.board_id"
         " JOIN users u ON u.id = p.author_id"
-        " WHERE p.is_deleted = 0"
+        " WHERE p.is_deleted = 0 AND t.is_deleted = 0"
     )
     if board_ids:
         marks = ",".join("?" * len(board_ids))
@@ -208,3 +217,102 @@ def recent_replies(limit=6, board_ids=None):
     sql += " ORDER BY p.created_at DESC LIMIT ?"
     args.append(limit)
     return dbm.rows(sql, tuple(args))
+
+
+# ---------- 回收站 ----------
+# 进出粒度：**话题是整体**的 —— 话题被删时，它下面的回复、任务、附件一起不可见；
+# 恢复话题即整体回来，不需要逐个还原。回复和附件则各自独立进出。
+# board_id=None 表示全站（管理员视角）。
+
+def trash_topics(board_id=None, limit=200):
+    sql = (
+        "SELECT t.*, u.display_name AS author_name,"
+        " (SELECT display_name FROM users WHERE id = t.deleted_by) AS deleter_name,"
+        " b.name AS board_name, b.id AS board_id,"
+        " (SELECT COUNT(*) FROM posts p WHERE p.topic_id = t.id AND p.is_deleted = 0)"
+        "   AS live_replies,"
+        " (SELECT COUNT(*) FROM attachments a WHERE a.is_deleted = 0 AND ("
+        "    (a.attachable_type = 'topic' AND a.attachable_id = t.id) OR"
+        "    (a.attachable_type = 'post' AND a.attachable_id IN"
+        "       (SELECT id FROM posts WHERE topic_id = t.id)))) AS live_files"
+        " FROM topics t JOIN users u ON u.id = t.author_id JOIN boards b ON b.id = t.board_id"
+        " WHERE t.is_deleted = 1"
+    )
+    args = []
+    if board_id is not None:
+        sql += " AND t.board_id = ?"
+        args.append(board_id)
+    sql += " ORDER BY COALESCE(t.deleted_at, t.updated_at) DESC LIMIT ?"
+    args.append(limit)
+    return dbm.rows(sql, tuple(args))
+
+
+def trash_posts(board_id=None, limit=300):
+    """已删回复。只列**宿主话题还在**的 —— 话题自己也进了回收站时，
+    这些回复跟着话题整体走，列出来是重复（恢复话题它们就回来了）。"""
+    sql = (
+        "SELECT p.*, u.display_name, t.title AS topic_title, t.id AS topic_id,"
+        " b.name AS board_name, b.id AS board_id,"
+        " (SELECT display_name FROM users WHERE id = p.deleted_by) AS deleter_name,"
+        " (SELECT COUNT(*) FROM posts c WHERE c.parent_id = p.id AND c.is_deleted = 0)"
+        "   AS live_children"
+        " FROM posts p JOIN users u ON u.id = p.author_id"
+        " JOIN topics t ON t.id = p.topic_id JOIN boards b ON b.id = t.board_id"
+        " WHERE p.is_deleted = 1 AND t.is_deleted = 0"
+    )
+    args = []
+    if board_id is not None:
+        sql += " AND t.board_id = ?"
+        args.append(board_id)
+    sql += " ORDER BY COALESCE(p.deleted_at, p.updated_at) DESC LIMIT ?"
+    args.append(limit)
+    return dbm.rows(sql, tuple(args))
+
+
+def trash_attachments(board_id=None, limit=300):
+    """已删附件（单独删掉的那种）。宿主话题/回复也进了回收站的，跟着宿主走，不重复列。"""
+    sql = (
+        "SELECT a.*, u.display_name,"
+        " (SELECT display_name FROM users WHERE id = a.deleted_by) AS deleter_name,"
+        " b.name AS board_name, b.id AS board_id,"
+        " t.title AS topic_title, t.id AS topic_id"
+        " FROM attachments a JOIN users u ON u.id = a.owner_id"
+        " JOIN boards b ON b.id = a.board_id"
+        " LEFT JOIN topics t ON (a.attachable_type = 'topic' AND t.id = a.attachable_id)"
+        " WHERE a.is_deleted = 1"
+        "   AND a.attachable_type IN ('topic', 'post')"
+        "   AND NOT (a.attachable_type = 'topic' AND EXISTS ("
+        "        SELECT 1 FROM topics t2 WHERE t2.id = a.attachable_id AND t2.is_deleted = 1))"
+        "   AND NOT (a.attachable_type = 'post' AND EXISTS ("
+        "        SELECT 1 FROM posts p2 WHERE p2.id = a.attachable_id AND p2.is_deleted = 1))"
+    )
+    args = []
+    if board_id is not None:
+        sql += " AND a.board_id = ?"
+        args.append(board_id)
+    sql += " ORDER BY COALESCE(a.deleted_at, a.created_at) DESC LIMIT ?"
+    args.append(limit)
+    return dbm.rows(sql, tuple(args))
+
+
+def trash_counts(board_id=None):
+    """回收站三个分组的条数，用于页头汇总与「有没有东西」判断。"""
+    a = () if board_id is None else (board_id,)
+    b_topic = "" if board_id is None else " AND board_id = ?"
+    b_post = "" if board_id is None else " AND t.board_id = ?"
+    b_att = "" if board_id is None else " AND a.board_id = ?"
+    return {
+        "topics": dbm.scalar(
+            f"SELECT COUNT(*) FROM topics WHERE is_deleted = 1{b_topic}", a, 0),
+        "posts": dbm.scalar(
+            "SELECT COUNT(*) FROM posts p JOIN topics t ON t.id = p.topic_id"
+            f" WHERE p.is_deleted = 1 AND t.is_deleted = 0{b_post}", a, 0),
+        "attachments": dbm.scalar(
+            "SELECT COUNT(*) FROM attachments a WHERE a.is_deleted = 1"
+            " AND a.attachable_type IN ('topic', 'post')"
+            " AND NOT (a.attachable_type = 'topic' AND EXISTS ("
+            "      SELECT 1 FROM topics t2 WHERE t2.id = a.attachable_id AND t2.is_deleted = 1))"
+            " AND NOT (a.attachable_type = 'post' AND EXISTS ("
+            "      SELECT 1 FROM posts p2 WHERE p2.id = a.attachable_id AND p2.is_deleted = 1))"
+            f"{b_att}", a, 0),
+    }

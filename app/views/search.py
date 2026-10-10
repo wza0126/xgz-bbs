@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request
 
 from .. import auth as authm
 from .. import db as dbm
+from .. import utils
 
 bp = Blueprint("search", __name__)
 
@@ -31,11 +32,13 @@ def index():
 
     if kw:
         if scope == "topics":
+            # 回收站里的话题不参与搜索（t.is_deleted = 0）
             topics = dbm.rows(
                 "SELECT t.id, t.title, t.body, t.kind, t.created_at, t.reply_count,"
                 " b.name AS board_name, b.id AS board_id, u.display_name AS author_name"
                 " FROM topics t JOIN boards b ON b.id = t.board_id JOIN users u ON u.id = t.author_id"
-                f" WHERE b.is_archived = 0 AND {clause} AND (t.title LIKE ? OR t.body LIKE ?)"
+                f" WHERE b.is_archived = 0 AND t.is_deleted = 0 AND {clause}"
+                "   AND (t.title LIKE ? OR t.body LIKE ?)"
                 " ORDER BY t.created_at DESC LIMIT 60", tuple(clause_args + [like, like]))
             total = len(topics)
         elif scope == "posts":
@@ -45,7 +48,8 @@ def index():
                 " b.name AS board_name, u.display_name AS author_name"
                 " FROM posts p JOIN topics t ON t.id = p.topic_id JOIN boards b ON b.id = t.board_id"
                 " JOIN users u ON u.id = p.author_id"
-                f" WHERE b.is_archived = 0 AND p.is_deleted = 0 AND {clause} AND p.body LIKE ?"
+                f" WHERE b.is_archived = 0 AND p.is_deleted = 0 AND t.is_deleted = 0 AND {clause}"
+                "   AND p.body LIKE ?"
                 " ORDER BY p.created_at DESC LIMIT 60", tuple(clause_args + [like]))
             total = len(posts)
         else:
@@ -56,6 +60,7 @@ def index():
                 " JOIN users u ON u.id = a.owner_id"
                 " LEFT JOIN topics t ON (a.attachable_type = 'topic' AND t.id = a.attachable_id)"
                 f" WHERE b.is_archived = 0 AND {clause} AND a.orig_name LIKE ?"
+                f"   AND {utils.ATT_VISIBLE_SQL}"
                 " ORDER BY a.created_at DESC LIMIT 60", tuple(clause_args + [like]))
             total = len(files)
 

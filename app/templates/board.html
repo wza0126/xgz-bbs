@@ -12,6 +12,7 @@
     <div class="right row gap8">
       <a class="btn sm" href="{{ url_for('boards.files', board_id=board.id) }}">文件库</a>
       {% if is_leader %}
+      <a class="btn sm" href="{{ url_for('trash.board_trash', board_id=board.id) }}">回收站</a>
       <a class="btn sm" href="{{ url_for('boards.settings', board_id=board.id) }}">组设置</a>
       {% endif %}
       {% if board.is_archived %}<span class="tag t-rej">已归档</span>{% endif %}

@@ -98,8 +98,10 @@ def upload():
 # ---------- 读取 ----------
 
 def _get_att_or_404(attach_id):
+    # 可见性：附件自己没被软删，且宿主（话题/回复）也没进回收站 ——
+    # 少了后者，话题被删之后旧链接还能把附件下下来。
     att = dbm.row("SELECT a.*, u.display_name FROM attachments a JOIN users u ON u.id = a.owner_id"
-                  " WHERE a.id = ?", (attach_id,))
+                  f" WHERE a.id = ? AND {utils.ATT_VISIBLE_SQL}", (attach_id,))
     if att is None:
         abort(404)
     board = authm.board_of_attachment(att)
@@ -155,10 +157,16 @@ def delete(attach_id):
     user = authm.current_user()
     if att["owner_id"] != user["id"] and not authm.is_leader(user, att["board_id"]):
         abort(403)
-    utils.delete_attachment(att)
+    if att["attachable_type"] == "draft":
+        # 草稿阶段的「移除」是真删：这文件从没跟着帖子发布出去，留着只是垃圾
+        utils.delete_attachment(att)
+    else:
+        # 已发布内容的附件：软删进回收站，记录和磁盘文件都留着，可恢复
+        dbm.execute("UPDATE attachments SET is_deleted = 1, deleted_at = ?, deleted_by = ?"
+                    " WHERE id = ?", (dbm.now_ts(), user["id"], attach_id))
     if request.headers.get("X-Requested-With") == "fetch" or request.is_json:
         return jsonify(ok=True)
     flash_ok = request.form.get("back")
     from flask import flash, redirect
-    flash("附件已删除", "ok")
+    flash("附件已移入回收站" if att["attachable_type"] != "draft" else "附件已删除", "ok")
     return redirect(flash_ok or url_for("boards.home"))
