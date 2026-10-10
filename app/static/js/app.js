@@ -17,6 +17,74 @@
     return (i === 0 ? Math.round(n) : n.toFixed(1)) + ' ' + u[i];
   }
 
+  /* ---------------- 统一确认弹窗 ----------------
+     删除这类不可逆操作不再用原生 confirm：样式拦不住误点，个别浏览器/内嵌
+     环境还会直接把它屏蔽掉（那等于没有确认）。这里集中成一个模态框。
+     模板上仍然留着 onsubmit="return confirm(...)" —— 上面那段初始化会把它摘掉，
+     所以有 JS 时只弹一次；JS 没跑起来时它就是平时那个原生确认框。 */
+  function bbsConfirm(message, opts) {
+    opts = opts || {};
+    var wrap = document.getElementById('confirmModal');
+    if (!wrap) { return Promise.resolve(window.confirm(message)); }
+    return new Promise(function (resolve) {
+      var titleEl = wrap.querySelector('[data-modal-title]');
+      var msgEl = wrap.querySelector('[data-modal-msg]');
+      var okEl = wrap.querySelector('[data-modal-ok]');
+      var lastFocus = document.activeElement;
+
+      titleEl.textContent = opts.title || '确认操作';
+      msgEl.textContent = message || '';
+      okEl.textContent = opts.okText || '确定';
+      okEl.className = 'btn ' + (opts.danger === false ? 'pri' : 'danger');
+
+      function done(val) {
+        wrap.classList.add('hide');
+        document.removeEventListener('keydown', onKey, true);
+        wrap.removeEventListener('click', onClick);
+        okEl.removeEventListener('click', onOk);
+        if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+        resolve(val);
+      }
+      function onOk() { done(true); }
+      function onClick(e) {
+        var t = e.target;
+        if (t && t.closest && t.closest('[data-modal-cancel]')) { done(false); }
+      }
+      function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); done(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+      }
+
+      wrap.classList.remove('hide');
+      wrap.addEventListener('click', onClick);
+      okEl.addEventListener('click', onOk);
+      document.addEventListener('keydown', onKey, true);
+      setTimeout(function () { try { okEl.focus(); } catch (e) {} }, 20);
+    });
+  }
+
+  // 声明了 data-confirm 的表单交给上面的弹窗；顺手摘掉兜底的原生 confirm，
+  // 免得同一个操作被问两遍。
+  document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+    f.removeAttribute('onsubmit');
+  });
+
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form || !form.getAttribute) { return; }
+    var msg = form.getAttribute('data-confirm');
+    if (!msg) { return; }
+    e.preventDefault();
+    bbsConfirm(msg, {
+      title: form.getAttribute('data-confirm-title') || '确认操作',
+      okText: form.getAttribute('data-confirm-ok') || '确定',
+      danger: form.getAttribute('data-danger') !== '0'
+    }).then(function (ok) {
+      // 用 form.submit() 提交：不会再派发一轮 submit 事件，天然不会循环
+      if (ok) { form.submit(); }
+    });
+  });
+
   /* ---------------- 附件上传 ---------------- */
   function initUploader(root) {
     var input = root.querySelector('.up-input');
@@ -142,25 +210,33 @@
   document.querySelectorAll('[data-uploader]').forEach(initUploader);
 
   document.addEventListener('submit', function (e) {
-    if (uploading > 0 && !e.target.hasAttribute('data-allow-submit')) {
-      if (!window.confirm('还有文件正在上传，现在提交会漏掉它们。要继续吗？')) {
-        e.preventDefault();
-      }
-    }
+    var form = e.target;
+    if (!form || !form.hasAttribute) { return; }
+    if (form.hasAttribute('data-confirm')) { return; }   // 交给上面的危险操作弹窗
+    if (uploading <= 0 || form.hasAttribute('data-allow-submit')) { return; }
+    e.preventDefault();
+    bbsConfirm('还有文件正在上传，现在提交会漏掉它们。', {
+      title: '文件还在上传', okText: '仍然提交', danger: false
+    }).then(function (ok) {
+      if (ok) { form.setAttribute('data-allow-submit', '1'); form.submit(); }
+    });
   }, true);
 
   /* ---------------- 已上传附件删除 ---------------- */
   document.querySelectorAll('[data-del-att]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var id = btn.getAttribute('data-del-att');
-      if (!window.confirm('删除这个附件？')) { return; }
-      fetch('/f/' + id + '/delete', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': CSRF, 'X-Requested-With': 'fetch' }
-      }).then(function () {
-        var el = document.getElementById('att-' + id);
-        if (el) { el.remove(); }
-      }).catch(function () { window.alert('删除失败，请刷新重试'); });
+      bbsConfirm('删除这个附件？删除后无法恢复。如果正文里引用过它，插图会变成空图。',
+                 { title: '删除附件', okText: '删除' }).then(function (ok) {
+        if (!ok) { return; }
+        fetch('/f/' + id + '/delete', {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': CSRF, 'X-Requested-With': 'fetch' }
+        }).then(function () {
+          var el = document.getElementById('att-' + id);
+          if (el) { el.remove(); }
+        }).catch(function () { window.alert('删除失败，请刷新重试'); });
+      });
     });
   });
 

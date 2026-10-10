@@ -59,11 +59,17 @@
                   <button class="btn sm">重置密码</button>
                 </form>
                 <form method="post" action="{{ url_for('admin.user_toggle', user_id=u.id) }}"
+                      data-confirm="确定要{{ '停用' if u.is_active else '启用' }} {{ u.display_name }} 的账号吗？"
+                      data-confirm-title="{{ '停用账号' if u.is_active else '启用账号' }}"
+                      data-confirm-ok="{{ '停用' if u.is_active else '启用' }}"
+                      data-danger="{{ '1' if u.is_active else '0' }}"
                       onsubmit="return confirm('确定要{{ '停用' if u.is_active else '启用' }} {{ u.display_name }} 的账号吗？')">
                   {{ csrf() }}
                   <button class="btn sm {{ 'danger' if u.is_active }}">{{ '停用' if u.is_active else '启用' }}</button>
                 </form>
                 <form method="post" action="{{ url_for('admin.user_delete', user_id=u.id) }}"
+                      data-confirm="删除账号「{{ u.display_name }}（{{ u.username }}）」？如果 TA 名下已经有话题、回复或材料，系统会拒绝删除，并建议你改用「停用」。确定继续吗？"
+                      data-confirm-title="删除账号" data-confirm-ok="删除账号"
                       onsubmit="return confirm('删除账号「{{ u.display_name }}（{{ u.username }}）」？\n\n如果 TA 名下已经有话题、回复或材料，系统会拒绝删除，并建议你改用「停用」。\n\n确定继续吗？')">
                   {{ csrf() }}
                   <button class="btn sm danger">删除</button>

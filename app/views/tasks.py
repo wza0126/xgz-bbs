@@ -71,13 +71,14 @@ def submit(topic_id):
         return redirect(url_for("topics.detail", topic_id=topic_id) + "#task")
 
     ts = dbm.now_ts()
+    post_id = None
     if a["submission_post_id"]:
-        post_id = a["submission_post_id"]
-        exists = dbm.row("SELECT id FROM posts WHERE id = ?", (post_id,))
-        if exists is None:
-            post_id = None
-    else:
-        post_id = None
+        # 只认「还在、并且没被删掉」的旧提交帖，能改就改它（保持楼层不变）；
+        # 被删过就另起一条新回复，绝不把新内容写回那条已废的帖子 ——
+        # 讨论区只显示 is_deleted = 0 的帖子，写回废帖等于「交了也看不见」。
+        old = dbm.row("SELECT id, is_deleted FROM posts WHERE id = ?", (a["submission_post_id"],))
+        if old is not None and not old["is_deleted"]:
+            post_id = a["submission_post_id"]
 
     if post_id is None:
         floor = (dbm.scalar("SELECT MAX(floor_no) FROM posts WHERE topic_id = ?", (topic_id,), 0) or 0) + 1

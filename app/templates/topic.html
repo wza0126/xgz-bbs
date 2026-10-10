@@ -35,6 +35,8 @@
             {{ csrf() }}<button class="btn xs">{{ '重新开放' if topic.status == 'closed' else '关闭' }}</button>
           </form>
           <form method="post" action="{{ url_for('topics.delete', topic_id=topic.id) }}" class="inline-form"
+                data-confirm="删除后这个话题、它下面的所有讨论和附件都无法恢复。确定要删除吗？"
+                data-confirm-title="删除话题" data-confirm-ok="删除话题"
                 onsubmit="return confirm('删除后话题及其讨论、附件都无法恢复，确定吗？')">
             {{ csrf() }}<button class="btn xs danger">删除</button>
           </form>
@@ -186,7 +188,11 @@
                         data-reply-name="{{ p.display_name }}">回复</button>
                 {% endif %}
                 {% if p.author_id == current_user.id or is_leader %}
+                {% set kids = children.get(p.id, []) | length %}
                 <form method="post" action="{{ url_for('topics.delete_post', post_id=p.id) }}" class="inline-form"
+                      data-confirm="{% if is_sub %}这是 {{ p.display_name }} 的任务提交，删掉以后 TA 的状态会退回「进行中」，需要重新提交。{% endif %}{% if kids %}这条回复下面还挂着 {{ kids }} 条回复，删掉之后它们会提上来变成独立楼层（内容不会跟着消失）。{% endif %}删除后无法恢复，确定吗？"
+                      data-confirm-title="{{ '删除任务提交' if is_sub else '删除这条回复' }}"
+                      data-confirm-ok="删除"
                       onsubmit="return confirm('删除这条回复？')">
                   {{ csrf() }}<button class="linkish danger">删除</button>
                 </form>
@@ -207,6 +213,8 @@
                   {% if c.author_id == current_user.id or is_leader %}
                   <div class="pacts">
                     <form method="post" action="{{ url_for('topics.delete_post', post_id=c.id) }}" class="inline-form"
+                          data-confirm="删除后无法恢复，确定吗？"
+                          data-confirm-title="删除这条回复" data-confirm-ok="删除"
                           onsubmit="return confirm('删除这条回复？')">
                       {{ csrf() }}<button class="linkish danger">删除</button>
                     </form>

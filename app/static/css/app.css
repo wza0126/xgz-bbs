@@ -513,3 +513,22 @@ p{margin:0 0 8px}
   .action-panel{min-width:0;width:min(88vw,340px)}
   .action-panel.narrow{min-width:0;width:min(88vw,320px)}
 }
+
+/* ---------------- 确认弹窗（危险操作） ----------------
+   原生 confirm 挡不住手滑，样式也没法统一；删除这类不可逆的操作都走这个模态框，
+   至少要点两下（打开 → 点确定）才删得掉。消息里的换行用 pre-line 保住，
+   后台那些「为什么可能删不掉」的说明才不会挤成一坨。 */
+.modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-mask{position:absolute;inset:0;background:rgba(31,35,40,.45)}
+.modal-box{
+  position:relative;z-index:1;width:min(92vw,420px);max-height:86vh;overflow:auto;
+  background:var(--card);border:1px solid var(--line2);border-radius:var(--r);
+  padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.18);
+}
+.modal-box h3{font-size:15px;font-weight:500;margin:0 0 8px}
+.modal-msg{margin:0 0 18px;color:var(--ink2);font-size:13.5px;line-height:1.7;white-space:pre-line}
+.modal-acts{display:flex;justify-content:flex-end;gap:8px}
+.modal-acts .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.modal-acts .btn.danger:hover{background:var(--danger-d)}
+.modal-acts .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.modal-acts .btn.pri:hover{background:var(--brand-d)}

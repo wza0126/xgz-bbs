@@ -106,6 +106,32 @@ def _render_new(board, kind, members, is_leader):
                            members=members, is_leader=is_leader)
 
 
+def _split_floors(posts):
+    """把回复分成「顶层楼层」和「楼中楼」两层。
+
+    关键点：子回复能不能显示，取决于父帖**还在不在这个列表里**。
+    父帖被删（软删除）后就不在 posts 里了，挂在它下面的子回复如果还按
+    原来的父子关系归类，就永远渲染不出来 —— 父节点都找不到，谁去遍历它？
+
+    所以这里反着判断：只有父帖确实存在，才挂到它下面；父帖没了（或父帖自己
+    也是被挂着的），就把这条回复提到顶层当独立楼层显示，宁可少一层缩进，
+    也不能让内容凭空消失。历史数据里已经存在的孤儿回复同样能被这一步救回来。
+    """
+    ids = {p["id"] for p in posts}
+    top_ids = {p["id"] for p in posts if not p["parent_id"] or p["parent_id"] not in ids}
+    top_level = []
+    children = {}
+    for p in posts:                      # posts 已按 floor_no 升序
+        if p["id"] in top_ids:
+            top_level.append(p)
+        elif p["parent_id"] in top_ids:
+            children.setdefault(p["parent_id"], []).append(p)
+        else:
+            # 父帖自己挂在别人楼下（深度异常，正常 UI 走不出来）——兜底放顶层
+            top_level.append(p)
+    return top_level, children
+
+
 # ---------- 详情 ----------
 
 @bp.route("/t/<int:topic_id>")
@@ -126,13 +152,7 @@ def detail(topic_id):
 
     topic_atts = utils.attachments_for("topic", [topic_id]).get(topic_id, [])
     post_atts = utils.attachments_for("post", [p["id"] for p in posts])
-    children = {}
-    top_level = []
-    for p in posts:
-        if p["parent_id"]:
-            children.setdefault(p["parent_id"], []).append(p)
-        else:
-            top_level.append(p)
+    top_level, children = _split_floors(posts)
 
     return render_template("topic.html", board=g.board, topic=topic, posts=posts,
                            top_level=top_level, children=children, post_atts=post_atts,
@@ -322,5 +342,32 @@ def delete_post(post_id):
         utils.delete_attachment(att)
     dbm.execute("UPDATE posts SET is_deleted = 1, body = '' WHERE id = ?", (post_id,))
     dbm.execute("UPDATE topics SET reply_count = MAX(reply_count - 1, 0) WHERE id = ?", (post["tid"],))
-    flash("回复已删除", "ok")
+
+    # 删掉的如果正好是某位组员的任务提交，状态得跟着退回来。
+    # 提交帖是**软删除**（is_deleted = 1），task_assignees.submission_post_id 上那个
+    # ON DELETE SET NULL 是给真删除用的，这里不会触发 —— 不手动处理就会变成
+    # 「侧栏写着已提交、讨论区却空空如也」（线上就踩过这个坑）。
+    sub = dbm.row(
+        "SELECT a.id, a.user_id, a.status, k.title AS task_title, k.topic_id,"
+        " u.display_name AS who"
+        " FROM task_assignees a JOIN tasks k ON k.id = a.task_id"
+        " JOIN users u ON u.id = a.user_id"
+        " WHERE a.submission_post_id = ?", (post_id,))
+    if sub is None:
+        flash("回复已删除", "ok")
+    else:
+        # 连同审核痕迹一起清掉：评分、评语、审核人都对应那条已经不在的提交，
+        # 留着只会让人以为「还审过」。
+        was_confirmed = sub["status"] == "confirmed"
+        dbm.execute(
+            "UPDATE task_assignees SET status = 'doing', submission_post_id = NULL,"
+            " submitted_at = NULL, score = NULL, review_note = '',"
+            " reviewed_by = NULL, reviewed_at = NULL WHERE id = ?", (sub["id"],))
+        utils.notify([sub["user_id"]], actor_id=user["id"], kind="review",
+                     summary=f"任务「{sub['task_title']}」的提交被撤回，需要重新提交",
+                     link=url_for("topics.detail", topic_id=sub["topic_id"]) + "#task",
+                     board_id=post["board_id"], topic_id=sub["topic_id"], task_id=None)
+        revoked = "（原来的审核结果也一并撤销了）" if was_confirmed else ""
+        flash(f"回复已删除；这是 {sub['who']} 的任务提交，状态已退回「进行中」{revoked}，需要重新提交",
+              "warn")
     return redirect(url_for("topics.detail", topic_id=post["tid"]))

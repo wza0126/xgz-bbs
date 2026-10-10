@@ -73,6 +73,10 @@
 
               <div class="row gap8">
                 <form method="post" action="{{ url_for('admin.kind_toggle', kid=k.id) }}"
+                      data-confirm="{{ '停用' if k.is_active else '重新启用' }}「{{ k.label }}」？{{ '停用后它不会再出现在发布页和标签栏，但已经在用的话题不受影响。' if k.is_active else '' }}"
+                      data-confirm-title="{{ '停用类型标签' if k.is_active else '重新启用类型标签' }}"
+                      data-confirm-ok="{{ '停用' if k.is_active else '重新启用' }}"
+                      data-danger="{{ '1' if k.is_active else '0' }}"
                       onsubmit="return confirm('{{ '停用' if k.is_active else '重新启用' }}「{{ k.label }}」？')">
                   {{ csrf() }}
                   <button class="btn sm {{ 'danger' if k.is_active }}"
@@ -81,6 +85,8 @@
                   </button>
                 </form>
                 <form method="post" action="{{ url_for('admin.kind_delete', kid=k.id) }}"
+                      data-confirm="删除标签「{{ k.label }}」？如果有话题正在用它，系统会拒绝删除并建议你改用「停用」。"
+                      data-confirm-title="删除类型标签" data-confirm-ok="删除标签"
                       onsubmit="return confirm('删除标签「{{ k.label }}」？\n\n如果有话题正在用它，系统会拒绝删除并建议你改用「停用」。')">
                   {{ csrf() }}
                   <button class="btn sm danger">删除</button>

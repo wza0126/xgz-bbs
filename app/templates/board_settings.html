@@ -71,6 +71,8 @@
           </form>
           {% if m.id != board.owner_id %}
           <form method="post" action="{{ url_for('boards.member_remove', board_id=board.id, user_id=m.id) }}"
+                data-confirm="确定把 {{ m.display_name }} 移出课题组？移出后 TA 就看不到这个课题组的内容了，之前发的话题和交的材料会保留。"
+                data-confirm-title="移出课题组成员" data-confirm-ok="移出"
                 onsubmit="return confirm('确定把 {{ m.display_name }} 移出课题组？')">
             {{ csrf() }}
             <button class="btn xs danger">移出</button>

@@ -89,7 +89,7 @@ xgz-bbs/
 │  ├─ views/            8 个蓝图：auth boards topics tasks files notify search admin
 │  ├─ templates/        Jinja2 模板
 │  └─ static/           app.css + app.js
-├─ tools/               演示数据 / 冒烟测试 / 线上安全验收 / 备份 / 数据盘点 / 重置密码 / 换行符检查 / 草稿清理 / 一键部署
+├─ tools/               演示数据 / 冒烟测试 / 流程回归 / 线上安全验收 / 备份 / 数据盘点 / 重置密码 / 换行符检查 / 草稿清理 / 一键部署
 ├─ deploy/              群晖 NAS 部署脚本（LF 换行，会被同步到 ~/myproject/）
 └─ docs/                设计方案 · 部署说明 · UI 原型
 ```
@@ -135,6 +135,7 @@ xgz-bbs/
 # 本地 / 演示环境（会写数据，先复位）
 python tools/seed_demo.py --reset
 python tools/smoke_test.py                              # 全站冒烟 408 项，需先启动服务
+python tools/check_flows.py                             # 任务提交/删回复/楼中楼 回归 37 项，需先启动服务
 
 # 线上（已有真实数据）——只读 + 隔离账号，绝不碰真实内容
 BBS_SMOKE_BASE=http://192.168.10.201:8009 BBS_ADMIN_PASSWORD=<admin密码> \
@@ -184,3 +185,7 @@ python tools/cleanup_drafts.py --scan-orphans   # 磁盘与库对账：孤儿文
 > ⚠️ **线上有真实数据之后，不要再跑 `smoke_test.py`。** 它会确认/打回真实的提交、
 > 调整真实的指派、在真实话题里发回复、还建测试账号 —— 在生产库上这些都是破坏性的。
 > 线上验收请改用 `tools/live_check.py`（只读断言 + 一个用完即删的临时账号）。
+>
+> `tools/check_flows.py` 同样**只能打演示库**：它会真提交一次任务、删一条回复、
+> 建一个临时话题。它管的是 smoke_test 不覆盖的**状态机**——删掉任务提交帖之后
+> 指派状态有没有退回、重新提交会不会写回废帖、父帖被删后楼中楼还在不在。
