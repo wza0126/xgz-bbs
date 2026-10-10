@@ -80,6 +80,10 @@ _ADDED_COLUMNS = [
     ("topics", "is_deleted", "INTEGER NOT NULL DEFAULT 0"),
     ("topics", "deleted_at", "INTEGER"),
     ("topics", "deleted_by", "INTEGER"),
+    # posts.is_deleted 是很早就有的列，正常老库都在；这里列出来只是兜底 ——
+    # schema.sql 有 CREATE INDEX ... ON posts(is_deleted, deleted_at)，
+    # 万一某个库缺了它，建索引会直接报 no such column。有就跳过，纯防御。
+    ("posts", "is_deleted", "INTEGER NOT NULL DEFAULT 0"),
     ("posts", "deleted_at", "INTEGER"),
     ("posts", "deleted_by", "INTEGER"),
     ("attachments", "is_deleted", "INTEGER NOT NULL DEFAULT 0"),
@@ -107,11 +111,15 @@ def init_db(app):
     schema = (Path(app.root_path) / "schema.sql").read_text(encoding="utf-8")
     conn = connect(app.config["DB_PATH"])
     try:
-        conn.executescript(schema)
-        conn.commit()
+        # ⚠️ 顺序很重要：必须「先补列、再跑 schema」。
+        # schema.sql 末尾有 CREATE INDEX ... ON topics(..., is_deleted, ...)，
+        # 老库的 topics 表还没有这些列时，CREATE INDEX 会直接报「no such column」。
+        # 新库时 _ensure_columns 见不到表、原样返回，不产生副作用。
         fixed = _ensure_columns(conn)
         if fixed:
             app.logger.info("补上了缺失的字段：%s", "、".join(fixed))
+        conn.executescript(schema)
+        conn.commit()
         # 话题类型清单存库（管理员可在后台增删）。已存在的 code 不会被覆盖，
         # 所以每次启动跑一遍是安全的：只补「种子里有、库里没有」的类型。
         from . import kinds as kindsm
