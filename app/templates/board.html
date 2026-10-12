@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import avatar, kind_tag, status_tag, csrf, pager with context %}
+{% from "_macros.html" import avatar, kind_tag, status_tag, csrf, pager, todo_entry with context %}
 {% block title %}{{ board.name }}{% endblock %}
 
 {% block content %}
@@ -53,6 +53,7 @@
 <div class="cols">
   <div>
     <section class="card">
+      {{ todo_entry() }}
       {% if topics %}
       <div class="tlist">
         {% for t in topics %}

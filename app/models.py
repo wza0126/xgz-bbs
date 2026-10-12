@@ -316,3 +316,27 @@ def trash_counts(board_id=None):
             "      SELECT 1 FROM posts p2 WHERE p2.id = a.attachable_id AND p2.is_deleted = 1))"
             f"{b_att}", a, 0),
     }
+
+
+# ---------- 行动研究待办事项（平台级）----------
+# 排序口径：未完成的在前，按 sort_order（人工排的优先级，越小越靠前）；
+# 已完成的沉到末尾，按完成时间先后。编号由页面按显示顺序现算（loop.index），
+# 所以拖动排序后编号自动重排，不用另存一列。
+
+def todo_list():
+    return dbm.rows(
+        "SELECT t.*, u.display_name AS creator_name"
+        " FROM action_todos t LEFT JOIN users u ON u.id = t.created_by"
+        " ORDER BY t.is_done ASC,"
+        "          CASE WHEN t.is_done = 0 THEN t.sort_order ELSE COALESCE(t.done_at, 0) END ASC,"
+        "          t.id ASC"
+    )
+
+
+def todo_get(todo_id):
+    return dbm.row("SELECT * FROM action_todos WHERE id = ?", (todo_id,))
+
+
+def todo_open_count():
+    """未完成条数 —— 置顶入口上显示「还有 N 项未完成」。"""
+    return dbm.scalar("SELECT COUNT(*) FROM action_todos WHERE is_done = 0", (), 0)

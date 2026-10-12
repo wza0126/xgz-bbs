@@ -696,6 +696,102 @@
 
   document.querySelectorAll('[data-rte]').forEach(initEditor);
 
+  /* ---------------- 行动研究待办：拖动排序 ----------------
+     只让「未完成」的行参与排序（已完成会自动沉到末尾，不掺进来）。
+     拖完把新的 id 顺序写回服务端，再按显示顺序把编号重排一遍 ——
+     编号本来就是按位置现显示的，重排后就跟手排的优先级一致了。 */
+  (function () {
+    var list = document.querySelector('[data-todo-sort]');
+    var reorderUrl = window.BBS && window.BBS.urls && window.BBS.urls.todoReorder;
+    if (!list || !reorderUrl) { return; }
+    var dragEl = null;
+
+    function openRows() {
+      return Array.prototype.slice.call(list.querySelectorAll('.todo-item[data-done="0"]'));
+    }
+
+    function renumber() {
+      Array.prototype.slice.call(list.querySelectorAll('.todo-item')).forEach(function (row, i) {
+        var n = row.querySelector('.todo-no');
+        if (n) { n.textContent = String(i + 1); }
+      });
+    }
+
+    function save() {
+      var fd = new FormData();
+      openRows().forEach(function (row) { fd.append('order', row.getAttribute('data-id')); });
+      fetch(reorderUrl, {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': CSRF, 'X-Requested-With': 'fetch' },
+        body: fd
+      }).catch(function () { window.alert('顺序没保存成功，刷新页面后重试。'); });
+    }
+
+    list.addEventListener('dragstart', function (e) {
+      var it = e.target.closest && e.target.closest('.todo-item');
+      if (!it || it.getAttribute('data-done') !== '0') { e.preventDefault(); return; }
+      dragEl = it;
+      it.classList.add('dragging');
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', it.getAttribute('data-id'));
+      } catch (e2) { /* 个别环境不给 dataTransfer，忽略即可 */ }
+    });
+
+    list.addEventListener('dragover', function (e) {
+      if (!dragEl) { return; }
+      var it = e.target.closest && e.target.closest('.todo-item');
+      if (!it || it === dragEl || it.getAttribute('data-done') !== '0') { return; }
+      e.preventDefault();
+      var r = it.getBoundingClientRect();
+      list.insertBefore(dragEl, (e.clientY - r.top) > r.height / 2 ? it.nextSibling : it);
+    });
+
+    list.addEventListener('drop', function (e) { if (dragEl) { e.preventDefault(); } });
+
+    list.addEventListener('dragend', function () {
+      if (!dragEl) { return; }
+      dragEl.classList.remove('dragging');
+      dragEl = null;
+      renumber();
+      save();
+    });
+  })();
+
+  /* ---------------- 行动研究待办：截止日期三联下拉 ----------------
+     不选年份 = 暂不限期（月、日置灰且不提交）。选了年份之后月、日才有意义，
+     日的上限跟着年月走（2 月里不会留 31 日）。 */
+  document.querySelectorAll('.due-pick').forEach(function (pick) {
+    var y = pick.querySelector('select[name="due_y"]');
+    var m = pick.querySelector('select[name="due_m"]');
+    var d = pick.querySelector('select[name="due_d"]');
+    if (!y || !m || !d) { return; }
+    var wasEmpty = !y.value;
+
+    function daysIn(yy, mm) { return new Date(yy, mm, 0).getDate(); }
+
+    function sync() {
+      var has = !!y.value;
+      m.disabled = !has;
+      d.disabled = !has;
+      if (!has) { return; }
+      var max = daysIn(parseInt(y.value, 10) || 2000, parseInt(m.value, 10) || 1);
+      if (parseInt(d.value, 10) > max) { d.value = String(max); }
+    }
+
+    y.addEventListener('change', function () {
+      if (wasEmpty && y.value) {           // 头一回选上年份：默认给今天
+        var now = new Date();
+        m.value = String(now.getMonth() + 1);
+        d.value = String(now.getDate());
+      }
+      wasEmpty = !y.value;
+      sync();
+    });
+    m.addEventListener('change', sync);
+    sync();
+  });
+
   /* ---------------- 未读数轮询 ---------------- */
   var badge = document.getElementById('notifBadge');
   var countUrl = window.BBS && window.BBS.urls && window.BBS.urls.notifCount;

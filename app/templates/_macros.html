@@ -3,6 +3,22 @@
 <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 {%- endmacro %}
 
+{# 行动研究待办事项的「永久置顶」入口。
+
+   放在帖子列表最上方，登录后所有人可见可点；页面内只有管理员能操作。
+   做成一条横贯的置顶条，带未完成条数，一眼知道还有多少事没干。 #}
+{% macro todo_entry() -%}
+{% set n = todo_open_count() %}
+<a class="todo-pin" href="{{ url_for('todos.index') }}">
+  <span class="todo-pin-ic" aria-hidden="true">☑</span>
+  <span class="todo-pin-main">
+    <span class="todo-pin-t">行动研究待办事项</span>
+    <span class="todo-pin-s">{% if n %}还有 <b>{{ n }}</b> 项未完成{% else %}目前没有未完成的事项{% endif %}</span>
+  </span>
+  <span class="todo-pin-go">打开查看 →</span>
+</a>
+{%- endmacro %}
+
 {% macro avatar(name, cls='') -%}
 <span class="av {{ cls }}" style="{{ avatar_style(name) }}">{{ avatar_char(name) }}</span>
 {%- endmacro %}

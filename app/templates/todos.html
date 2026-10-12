@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}行动研究待办事项{% endblock %}
+
+{# 截止日期 = 三个下拉（年 / 月 / 日）。不选年份就是「暂不限期」。
+   sel 传 'YYYY-MM-DD' 时按月/日预选，编辑已有条目用得上。 #}
+{% macro due_picker(sel=None) -%}
+<select name="due_y" class="select dsel" data-due-y aria-label="截止年份">
+  <option value="">暂不限期</option>
+  {% for y in years %}{% set ys = y | string %}
+  <option value="{{ y }}" {{ 'selected' if sel and sel[0:4] == ys }}>{{ y }} 年</option>
+  {% endfor %}
+</select>
+<select name="due_m" class="select dsel" data-due-m aria-label="截止月份">
+  {% for m in range(1, 13) %}{% set mm = '%02d' | format(m) %}
+  <option value="{{ m }}" {{ 'selected' if sel and sel[5:7] == mm }}>{{ m }} 月</option>
+  {% endfor %}
+</select>
+<select name="due_d" class="select dsel" data-due-d aria-label="截止日">
+  {% for d in range(1, 32) %}{% set dd = '%02d' | format(d) %}
+  <option value="{{ d }}" {{ 'selected' if sel and sel[8:10] == dd }}>{{ d }} 日</option>
+  {% endfor %}
+</select>
+{%- endmacro %}
+
+{% block content %}
+<div class="crumb"><a href="{{ url_for('boards.home') }}">课题组广场</a> / 行动研究待办事项</div>
+
+<section class="card">
+  <h1>行动研究待办事项</h1>
+  <p class="muted">
+    全平台共用的一张行动研究清单：<b>越重要越靠前</b>。管理员可以增、改、删，拖动（或点 ↑ ↓）调整先后；
+    其他老师随时点开查看进展。勾选完成后条目会自动沉到末尾并变灰，取消勾选即可恢复。
+  </p>
+
+  {% if is_admin %}
+  <form class="todo-add" method="post" action="{{ url_for('todos.add') }}">
+    {{ csrf() }}
+    <input class="ti" type="text" name="content" maxlength="500" autocomplete="off"
+           placeholder="写一条要推进的事，例如：整理 10 月课堂观察记录" required>
+    <span class="due-pick">
+      <span class="muted small">截止</span>
+      {{ due_picker() }}
+    </span>
+    <button class="btn pri">＋ 添加</button>
+  </form>
+  <p class="muted small top-gap-sm">「截止」不选年份＝暂不限期；选了年份再按需选月、日。</p>
+  {% else %}
+  <p class="muted small">这张清单由管理员维护，你随时可以查看进展。</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="row gap8">
+    <h2 class="grow">清单<span class="faint small">（未完成 {{ open_n }} · 已完成 {{ done_n }}）</span></h2>
+    {% if is_admin and open_n %}<span class="muted small">按住左侧「⋮⋮」可上下拖动排序</span>{% endif %}
+  </div>
+
+  {% if items %}
+  <ol class="todolist" data-todo-sort>
+    {% for it in items %}
+    {% set ds = due_state(it.due_date) if it.due_date else None %}
+    <li class="todo-item{{ ' done' if it.is_done }}" data-id="{{ it.id }}"
+        data-done="{{ 1 if it.is_done else 0 }}">
+
+      {% if is_admin and not it.is_done %}
+      <span class="todo-handle" draggable="true" title="按住拖动排序">⋮⋮</span>
+      {% else %}
+      <span class="todo-handle off" aria-hidden="true">⋮⋮</span>
+      {% endif %}
+
+      <span class="todo-no">{{ loop.index }}</span>
+
+      {% if is_admin %}
+      <form class="todo-check" method="post" action="{{ url_for('todos.toggle', todo_id=it.id) }}">
+        {{ csrf() }}
+        <button type="submit" class="tcheck{{ ' on' if it.is_done }}"
+                title="{{ '取消完成（回到未完成）' if it.is_done else '标记为已完成' }}"
+                aria-pressed="{{ 'true' if it.is_done else 'false' }}">{{ '✓' if it.is_done else '' }}</button>
+      </form>
+      {% else %}
+      <span class="tcheck static{{ ' on' if it.is_done }}"
+            title="{{ '已完成' if it.is_done else '未完成' }}">{{ '✓' if it.is_done else '' }}</span>
+      {% endif %}
+
+      <div class="todo-body">
+        <div class="todo-text">{{ it.content }}</div>
+        <div class="todo-meta">
+          <span class="todo-due{% if not it.due_date %} none{% elif ds[1] and not it.is_done %} over{% endif %}">
+            {%- if not it.due_date %}暂不限期
+            {%- elif it.is_done %}截止 {{ it.due_date }}
+            {%- else %}截止 {{ it.due_date }} · {{ ds[0] }}{% endif -%}
+          </span>
+          {% if it.creator_name %}<span>· {{ it.creator_name }} 添加</span>{% endif %}
+        </div>
+      </div>
+
+      {% if is_admin %}
+      {% if not it.is_done %}
+      <div class="todo-acts">
+        <form class="inline-form" method="post" action="{{ url_for('todos.move', todo_id=it.id) }}">
+          {{ csrf() }}<input type="hidden" name="dir" value="up">
+          <button class="fmini" title="上移">↑</button>
+        </form>
+        <form class="inline-form" method="post" action="{{ url_for('todos.move', todo_id=it.id) }}">
+          {{ csrf() }}<input type="hidden" name="dir" value="down">
+          <button class="fmini" title="下移">↓</button>
+        </form>
+      </div>
+      {% endif %}
+
+      <details class="todo-edit">
+        <summary class="linkish">编辑</summary>
+        <form class="todo-editform" method="post" action="{{ url_for('todos.edit', todo_id=it.id) }}">
+          {{ csrf() }}
+          <input class="ti" type="text" name="content" maxlength="500" autocomplete="off"
+                 value="{{ it.content }}" required>
+          <span class="due-pick">
+            <span class="muted small">截止</span>
+            {{ due_picker(it.due_date) }}
+          </span>
+          <div class="row gap8"><button class="btn pri sm">保存修改</button></div>
+        </form>
+      </details>
+
+      <form class="inline-form" method="post" action="{{ url_for('todos.delete', todo_id=it.id) }}"
+            data-confirm="删除这条待办？删除后直接消失、不进回收站。"
+            data-confirm-title="删除待办事项" data-confirm-ok="删除"
+            onsubmit="return confirm('删除后不可恢复，确定吗？')">
+        {{ csrf() }}<button class="fmini danger" title="删除">删除</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <div class="empty">
+    <p>还没有待办事项。</p>
+    {% if is_admin %}<p class="muted">在上面那个输入框里写第一条，把行动研究要推进的事列出来。</p>
+    {% else %}<p class="muted">等管理员添加后会显示在这里。</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

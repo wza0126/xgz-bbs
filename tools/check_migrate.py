@@ -12,6 +12,7 @@
   ① 不再抛 no such column           ② 新增列补齐
   ③ 老数据一行不少、is_deleted 默认 0  ④ 重复启动幂等
   ⑤ 迁移后回收站查询可用、软删/恢复链路通
+  ⑥ 新表（如 action_todos）在升级时自动建出来、写入正常
 
 用法：.venv/Scripts/python tools/check_migrate.py
 """
@@ -39,11 +40,21 @@ def make_old_schema() -> str:
       - posts:  去掉 deleted_at / deleted_by（**is_deleted 老库本来就有，必须保留**）
       - attachments: 去掉 is_deleted / deleted_at / deleted_by
       - 去掉三个回收站索引
-    新增列时，记得同步这里（否则就等于没测到）。
+      - 整块去掉 action_todos（待办是后加的新表，老库里本来没有）
+    新增列／新增表时，记得同步这里（否则就等于没测到）。
     """
     lines = (ROOT / "app" / "schema.sql").read_text(encoding="utf-8").splitlines()
     out = []
+    skip_block = False
     for ln in lines:
+        # action_todos 整块（注释 + CREATE TABLE + CREATE INDEX）一起摘掉 ——
+        # 单靠关键词过滤会漏掉列定义那些行，剩下的半截建表语句会直接语法错。
+        if "行动研究待办事项" in ln:
+            skip_block = True
+        if skip_block:
+            if "idx_todos_order" in ln:
+                skip_block = False
+            continue
         if "deleted_at" in ln or "deleted_by" in ln:
             continue
         # topics / attachments 的 is_deleted 是新增的；posts 那句注释里带「正文保留」的是老列
@@ -135,6 +146,22 @@ def main():
                         (tid,))
             items, total = models.topic_list(bid)
             check("恢复后又能看到", total == 1 and any(r["id"] == tid for r in items), total)
+
+        # ---------- 6. 新表随升级自动建出、能写能查 ----------
+        con = sqlite3.connect(str(db_path))
+        cols = {r[1] for r in con.execute("PRAGMA table_info(action_todos)")}
+        check("升级后 action_todos 表已建出",
+              {"id", "content", "due_date", "is_done", "sort_order", "done_at"} <= cols,
+              sorted(cols))
+        con.close()
+        with app.app_context():
+            check("todo_list 可用且为空", models.todo_list() == [])
+            check("todo_open_count 可用", models.todo_open_count() == 0)
+            dbm.execute("INSERT INTO action_todos (content, due_date, is_done, sort_order,"
+                        " created_at, updated_at) VALUES ('迁移后加一条','2030-01-01',0,0,?,?)",
+                        (dbm.now_ts(), dbm.now_ts()))
+            check("迁移后能写入待办", models.todo_open_count() == 1)
+            check("待办能按截止日期读出", models.todo_list()[0]["due_date"] == "2030-01-01")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

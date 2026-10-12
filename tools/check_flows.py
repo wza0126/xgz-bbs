@@ -10,6 +10,8 @@
   3. 父帖被删后，挂在它下面的楼中楼回复跟着一起消失
   4. 删除改成「进回收站」之后，任何一处查询漏了 is_deleted 过滤，
      删掉的内容就会从列表、搜索或下载里冒出来
+  5. 行动研究待办：入口要置顶在帖子列表上方、只有管理员能改，勾选完成要
+     沉到末尾且能取消还原，拖动重排后编号要跟着显示顺序走
 
 用法（先起服务、准备好演示数据）：
     BBS_DATA_DIR=D:/tmp/x  python tools/seed_demo.py --reset
@@ -88,7 +90,7 @@ class Client:
         data = dict(fields)
         data["_csrf"] = self.tok
         req = urllib.request.Request(
-            BASE + path, data=urllib.parse.urlencode(data).encode("utf-8"),
+            BASE + path, data=urllib.parse.urlencode(data, doseq=True).encode("utf-8"),
             headers={"Content-Type": "application/x-www-form-urlencoded"})
         try:
             r = self.op.open(req, timeout=20)
@@ -382,6 +384,124 @@ def case_trash(c, t, leader, board, mem):
     check("回收站：彻底删除后磁盘文件没了", not fpath.exists())
 
 
+def case_todos(c, t, leader, board, mem):
+    """行动研究待办事项：置顶入口、权限、增改删、勾选下沉 / 取消恢复、拖动重排。
+
+    这是「待办清单」的回归。核心几条：
+      · 入口必须出现在帖子列表**上方**（所有人可见可点）
+      · 只有管理员能增/改/删/排（组员 POST 一律 403）
+      · 勾选完成 → 沉到末尾；取消勾选 → 回到原来的优先级位置
+      · 拖动重排后 sort_order 连续，页面编号跟着显示顺序走
+    """
+    ad = Client()
+    check("待办：管理员登录", ad.login("admin", ADMIN_PASSWORD))
+
+    tag = "TODO-%s" % TAG
+    A, B, Cc = tag + "-A", tag + "-B", tag + "-C"
+    c.execute("DELETE FROM action_todos WHERE content LIKE ?", (tag + "%",))
+    c.commit()
+
+    def rows():
+        return [dict(r) for r in c.execute(
+            "SELECT id, content, due_date, is_done, sort_order FROM action_todos"
+            " WHERE content LIKE ?"
+            " ORDER BY is_done,"
+            "   CASE WHEN is_done = 0 THEN sort_order ELSE COALESCE(done_at, 0) END, id",
+            (tag + "%",))]
+
+    def by(key):
+        for r in rows():
+            if r["content"] == key:
+                return r
+        return None
+
+    # ---- 置顶入口：帖子列表最上方 ----
+    code, html = ad.get("/b/%d" % board)
+    check("待办：课题组页有置顶入口", code == 200 and 'class="todo-pin"' in html, "code=%s" % code)
+    check("待办：置顶入口在帖子列表上方",
+          'class="todo-pin"' in html and 'class="tlist"' in html
+          and html.index('class="todo-pin"') < html.index('class="tlist"'))
+    code, html = mem.get("/plaza")
+    check("待办：广场页也有置顶入口", code == 200 and 'class="todo-pin"' in html)
+
+    # ---- 权限：组员只看不改 ----
+    code, _ = mem.post("/todos/add", {"content": tag + "-X", "due_y": ""})
+    check("待办：组员添加被拒（403）", code == 403, code)
+    code, html = mem.get("/todos")
+    check("待办：组员能打开清单", code == 200 and "行动研究待办事项" in html, "code=%s" % code)
+    check("待办：组员页面上没有操作控件",
+          "todo-add" not in html and 'draggable="true"' not in html)
+
+    # ---- 添加 ----
+    for content in (A, B, Cc):
+        st, _ = ad.post("/todos/add", {"content": content, "due_y": "", "due_m": "", "due_d": ""})
+    check("待办：管理员添加返回 302", st == 302, st)
+    check("待办：新条目接在末尾", [r["content"] for r in rows()] == [A, B, Cc],
+          [r["content"] for r in rows()])
+    check("待办：不选年份 = 暂不限期",
+          all(r["due_date"] is None for r in rows()), [r["due_date"] for r in rows()])
+
+    # 截止日期：选了年月日 → YYYY-MM-DD；「日」越界自动夹到月末
+    ad.post("/todos/%d/edit" % by(B)["id"],
+            {"content": B, "due_y": "2031", "due_m": "2", "due_d": "31"})
+    check("待办：2 月 31 日自动夹到月末", by(B)["due_date"] == "2031-02-28", by(B)["due_date"])
+
+    # ---- 勾选完成 → 沉底 ----
+    ad.post("/todos/%d/toggle" % by(A)["id"], {})
+    check("待办：勾选后标记完成", by(A)["is_done"] == 1, by(A)["is_done"])
+    check("待办：完成项沉到列表末尾", [r["content"] for r in rows()] == [B, Cc, A],
+          [r["content"] for r in rows()])
+    code, html = ad.get("/todos")
+    check("待办：完成项带灰化样式", "todo-item done" in html)
+
+    # ---- 取消勾选 → 恢复未完成、回原顺位 ----
+    ad.post("/todos/%d/toggle" % by(A)["id"], {})
+    check("待办：取消勾选恢复未完成", by(A)["is_done"] == 0, by(A)["is_done"])
+    check("待办：取消勾选后回到原来的优先级位置",
+          [r["content"] for r in rows()] == [A, B, Cc], [r["content"] for r in rows()])
+
+    # ---- 拖动排序：C → A → B，编号跟着重排 ----
+    st, _ = ad.post("/todos/reorder",
+                    {"order": [by(Cc)["id"], by(A)["id"], by(B)["id"]]})
+    check("待办：拖动排序返回 302", st == 302, st)
+    check("待办：拖动后按新优先级排列", [r["content"] for r in rows()] == [Cc, A, B],
+          [r["content"] for r in rows()])
+    check("待办：重排后 sort_order 连续", [r["sort_order"] for r in rows()] == [0, 1, 2],
+          [r["sort_order"] for r in rows()])
+    code, html = ad.get("/todos")
+    check("待办：页面编号按显示顺序现算",
+          all(('class="todo-no">%d</span>' % i) in html for i in (1, 2, 3)))
+
+    # ---- ↑ / ↓ 兜底（拖动排序的无 JS 版本）----
+    ad.post("/todos/%d/move" % by(B)["id"], {"dir": "up"})
+    check("待办：下移按钮把 B 提到 A 前", [r["content"] for r in rows()] == [Cc, B, A],
+          [r["content"] for r in rows()])
+
+    # ---- 伪造拖动请求：已完成/不存在/重复的 id 都要被挡掉 ----
+    ad.post("/todos/%d/toggle" % by(A)["id"], {})          # A 变已完成
+    ad.post("/todos/reorder", {"order": [by(A)["id"], by(Cc)["id"], by(Cc)["id"], "999999"]})
+    check("待办：拖动请求里的已完成/重复/无效 id 被忽略",
+          [r["content"] for r in rows() if r["is_done"] == 0] == [Cc, B],
+          [r["content"] for r in rows()])
+    ad.post("/todos/%d/toggle" % by(A)["id"], {})          # 还原
+
+    # ---- 编辑 ----
+    ad.post("/todos/%d/edit" % by(Cc)["id"],
+            {"content": Cc + "-改", "due_y": "2032", "due_m": "3", "due_d": "9"})
+    check("待办：编辑改内容与截止日期",
+          by(Cc + "-改") is not None and by(Cc + "-改")["due_date"] == "2032-03-09",
+          by(Cc + "-改"))
+
+    # ---- 删除 ----
+    ad.post("/todos/%d/delete" % by(A)["id"], {})
+    check("待办：删除后条目没了", by(A) is None, [r["content"] for r in rows()])
+
+    # ---- 收尾：清掉本用例的数据 ----
+    c.execute("DELETE FROM action_todos WHERE content LIKE ?", (tag + "%",))
+    c.commit()
+    check("待办：用例数据已清理", rows() == [], rows())
+
+
 def main():
     if not DB.exists():
         sys.exit("[夹具] 数据库不存在：%s\n请先跑 tools/seed_demo.py --reset" % DB)
@@ -399,6 +519,8 @@ def main():
     case_confirm_wiring(c, t, leader, t["board_id"])
     print("\n-- 5. 回收站 --")
     case_trash(c, t, leader, t["board_id"], mem)
+    print("\n-- 6. 行动研究待办 --")
+    case_todos(c, t, leader, t["board_id"], mem)
 
     print("\n" + "=" * 60)
     print("通过 %d 项，失败 %d 项" % (len(OK), len(BAD)))

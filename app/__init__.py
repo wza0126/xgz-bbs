@@ -10,6 +10,7 @@ import config as cfg
 from . import auth as authm
 from . import db as dbm
 from . import kinds as kindsm
+from . import models
 from . import richtext
 from . import utils
 
@@ -46,7 +47,8 @@ def create_app():
     app.teardown_appcontext(dbm.close_db)
 
     # ---------- 蓝图 ----------
-    from .views import admin, auth, boards, files, notify, search, tasks, topics, trash
+    from .views import (admin, auth, boards, files, notify, search, tasks,
+                        todos, topics, trash)
     app.register_blueprint(auth.bp)
     app.register_blueprint(boards.bp)
     app.register_blueprint(topics.bp)
@@ -56,6 +58,7 @@ def create_app():
     app.register_blueprint(search.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(trash.bp)
+    app.register_blueprint(todos.bp)
 
     # ---------- 每个请求加载当前用户 ----------
     @app.before_request
@@ -113,6 +116,8 @@ def create_app():
         file_badge=utils.file_badge,
         due_state=utils.due_state,
         local_today=utils.local_today,
+        # 行动研究待办的置顶入口（_macros.html 的 todo_entry）要用未完成条数
+        todo_open_count=models.todo_open_count,
     )
     app.jinja_env.filters["dt"] = utils.fmt_dt
     app.jinja_env.filters["day"] = utils.fmt_day

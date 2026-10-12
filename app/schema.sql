@@ -185,6 +185,22 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 CREATE INDEX IF NOT EXISTS idx_reaction_target ON reactions(target_type, target_id);
 
+-- ---------- 行动研究待办事项（平台级清单）----------
+-- 全员可见可查看；只有管理员能增/改/删/排序。条目顺序由 sort_order 人工排定
+-- （越小越靠前 = 越重要）；勾选完成后靠 is_done 沉到列表末尾，取消勾选即恢复。
+CREATE TABLE IF NOT EXISTS action_todos (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    content    TEXT    NOT NULL DEFAULT '',      -- 待办内容
+    due_date   TEXT,                             -- 'YYYY-MM-DD'；NULL = 暂不限期
+    is_done    INTEGER NOT NULL DEFAULT 0,       -- 1 = 已完成
+    sort_order INTEGER NOT NULL DEFAULT 0,       -- 未完成项的人工优先级，越小越靠前
+    done_at    INTEGER,                          -- 勾选完成的时间（UTC 整数）
+    created_by INTEGER REFERENCES users(id),     -- 谁建的（管理员）
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_todos_order ON action_todos(is_done, sort_order, id);
+
 -- ---------- 杂项设置 ----------
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,

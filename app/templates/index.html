@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% from "_macros.html" import avatar, kind_tag, status_tag, csrf with context %}
+{% from "_macros.html" import avatar, kind_tag, status_tag, csrf, todo_entry with context %}
 {% block title %}课题组广场{% endblock %}
 
 {% block content %}
+{{ todo_entry() }}
 <div class="cols">
   <div>
     <div class="row bar">
