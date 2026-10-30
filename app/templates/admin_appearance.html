@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}外观风格{% endblock %}
+
+{% block content %}
+<div class="crumb">
+  <a href="{{ url_for('admin.home') }}">管理后台</a><span>/</span>外观风格
+</div>
+
+<section class="card">
+  <h1>外观风格</h1>
+  <p class="muted small">
+    这里是<strong>全站统一</strong>的配色，换完所有人刷新一下就生效，不用重启、不影响任何数据。
+    点下面任意一套即刻应用。
+  </p>
+
+  <div class="theme-grid">
+    {% for t in themes %}
+    <form method="post" action="{{ url_for('admin.appearance') }}" class="theme-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" name="theme" value="{{ t.key }}"
+              class="theme-card{{ ' on' if t.active }}"
+              {% if t.active %}aria-current="true"{% endif %}>
+        <span class="th-prev" style="background:{{ t.swatches[1] }}">
+          <span class="th-prev-top" style="background:{{ t.swatches[2] }}">
+            <span class="th-dot" style="background:{{ t.swatches[0] }}"></span>
+            <span class="th-ln" style="background:{{ t.swatches[0] }}"></span>
+            <span class="th-ln short" style="background:{{ t.swatches[0] }}"></span>
+          </span>
+          <span class="th-prev-body">
+            <span class="th-card" style="background:{{ t.swatches[2] }}">
+              <span class="th-bar" style="background:{{ t.swatches[0] }}"></span>
+              <span class="th-bar w70" style="background:{{ t.swatches[0] }}"></span>
+              <span class="th-bar w45" style="background:{{ t.swatches[0] }}"></span>
+            </span>
+            <span class="th-card" style="background:{{ t.swatches[2] }}">
+              <span class="th-bar" style="background:{{ t.swatches[0] }}"></span>
+              <span class="th-bar w55" style="background:{{ t.swatches[0] }}"></span>
+            </span>
+          </span>
+        </span>
+        <span class="th-meta">
+          <span class="th-name">
+            {{ t.name }}
+            {% if t.active %}<span class="tag t-ok">当前</span>{% endif %}
+          </span>
+          <span class="th-desc">{{ t.desc }}</span>
+          <span class="th-swatches">
+            {% for c in t.swatches %}<i style="background:{{ c }}"></i>{% endfor %}
+          </span>
+        </span>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <div class="trash-note top-gap">
+    想改其中某一套的具体颜色：编辑 <code class="mono">app/static/css/app.css</code> 里
+    <code class="mono">[data-theme="<em>键名</em>"]</code> 那一段即可，改完刷新页面就生效（模板样式不缓存）。
+    新增一套 = CSS 加一段 + <code class="mono">config.py</code> 的 <code class="mono">THEMES</code> 加一条。
+  </div>
+</section>
+{% endblock %}

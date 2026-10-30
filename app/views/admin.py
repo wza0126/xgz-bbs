@@ -9,6 +9,7 @@ from .. import auth as authm
 from .. import db as dbm
 from .. import kinds as kindsm
 from .. import models
+from .. import theme as theme_m
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -60,6 +61,24 @@ def home():
         " ORDER BY (last_login_at IS NULL), last_login_at DESC LIMIT 10")
     return render_template("admin_home.html", stats=stats, biggest=biggest,
                            last_logins=last_logins, trash=trash)
+
+
+# ---------------- 外观（全站主题） ----------------
+# 颜色定义在 app/static/css/app.css 的 [data-theme="<key>"]，
+# 主题清单在 config.THEMES，存取在 app/theme.py —— 这里只管页面与权限。
+@bp.route("/appearance", methods=["GET", "POST"])
+@authm.admin_required
+def appearance():
+    if request.method == "POST":
+        picked = request.form.get("theme", "")
+        if picked not in cfg.THEME_KEYS:
+            flash("没有这个主题，已保持原样。", "error")
+            return redirect(url_for("admin.appearance"))
+        key = theme_m.save(picked)
+        name = next((t["name"] for t in cfg.THEMES if t["key"] == key), key)
+        flash("外观已切换为「%s」，全站即时生效。" % name, "ok")
+        return redirect(url_for("admin.appearance"))
+    return render_template("admin_appearance.html", themes=theme_m.catalog())
 
 
 @bp.route("/users")

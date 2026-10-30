@@ -502,6 +502,66 @@ def case_todos(c, t, leader, board, mem):
     check("待办：用例数据已清理", rows() == [], rows())
 
 
+def case_theme(c, t, leader, board, mem):
+    """外观主题：后台统一切换、全站生效、非法值不生效、只有管理员能改。
+
+    核心风险有两个：
+      · 主题是**全站**的，写错了会把所有人页面搞花 → 非法 key 必须回落到默认
+      · 主题存在 settings 表，<html data-theme> 由服务端渲染 → 换完必须立刻反映到页面
+    """
+    ad = Client()
+    check("主题：管理员登录", ad.login("admin", ADMIN_PASSWORD))
+
+    code, html = ad.get("/admin/appearance")
+    check("主题：后台外观页可打开", code == 200, "code=%s" % code)
+    check("主题：页面列出全部五套",
+          all(k in html for k in ("cangqing", "mojuan", "zhuye", "taobai", "moye")))
+
+    def current(client, path="/plaza"):
+        code, html = client.get(path)
+        m = re.search(r'<html[^>]*\bdata-theme="([^"]*)"', html or "")
+        return (m.group(1) if m else None), code
+
+    def stored():
+        r = c.execute("SELECT value FROM settings WHERE key = 'theme'").fetchone()
+        return r["value"] if r else None
+
+    default = stored() or "cangqing"
+
+    # ---- 切换：全站生效（连未登录的登录页也跟着变）----
+    ad.post("/admin/appearance", {"theme": "moye"})
+    got, code = current(ad)
+    check("主题：管理员页切到墨夜", got == "moye", got)
+    got2, _ = current(mem)
+    check("主题：组员页面同步生效", got2 == "moye", got2)
+    anon = Client()
+    got3, _ = current(anon, "/login")
+    check("主题：未登录的登录页也生效", got3 == "moye", got3)
+    check("主题：已落库", stored() == "moye", stored())
+
+    # ---- 非法值：不许生效，也不许把库写坏 ----
+    ad.post("/admin/appearance", {"theme": 'x" onload="alert(1)'})
+    got, _ = current(ad)
+    check("主题：非法 key 被拒、原样保留", got == "moye", got)
+    check("主题：非法 key 没写进库", stored() == "moye", stored())
+    ad.post("/admin/appearance", {"theme": ""})
+    got, _ = current(ad)
+    check("主题：空值被拒、原样保留", got == "moye", got)
+
+    # ---- 权限：组员不能改 ----
+    code, _ = mem.get("/admin/appearance")
+    check("主题：组员打不开后台外观页", code in (403, 302), "code=%s" % code)
+    code, _ = mem.post("/admin/appearance", {"theme": "zhuye"})
+    check("主题：组员改主题被拒", code in (403, 302), "code=%s" % code)
+    got, _ = current(ad)
+    check("主题：组员没改成", got == "moye", got)
+
+    # ---- 收尾：切回原值 ----
+    ad.post("/admin/appearance", {"theme": default})
+    got, _ = current(ad)
+    check("主题：已切回原值", got == default, got)
+
+
 def main():
     if not DB.exists():
         sys.exit("[夹具] 数据库不存在：%s\n请先跑 tools/seed_demo.py --reset" % DB)
@@ -521,6 +581,8 @@ def main():
     case_trash(c, t, leader, t["board_id"], mem)
     print("\n-- 6. 行动研究待办 --")
     case_todos(c, t, leader, t["board_id"], mem)
+    print("\n-- 7. 外观主题 --")
+    case_theme(c, t, leader, t["board_id"], mem)
 
     print("\n" + "=" * 60)
     print("通过 %d 项，失败 %d 项" % (len(OK), len(BAD)))

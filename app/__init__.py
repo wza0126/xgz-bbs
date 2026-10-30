@@ -12,6 +12,7 @@ from . import db as dbm
 from . import kinds as kindsm
 from . import models
 from . import richtext
+from . import theme as theme_m
 from . import utils
 
 
@@ -132,6 +133,8 @@ def create_app():
             "current_user": user,
             "unread": utils.unread_count(user["id"]) if user else 0,
             "is_admin": authm.is_admin(user),
+            # 外观主题：管理员在后台统一切，<html data-theme="..."> 直接吃这个值
+            "theme": theme_m.current(),
         }
         # 话题类型清单来自数据库（管理员可在后台自助增删），每个请求读一次。
         # 读不到时退回 config 里注入的兜底值，页面不会因为一个标签渲染不出来。

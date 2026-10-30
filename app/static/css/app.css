@@ -1,34 +1,132 @@
 /* ============================================================
    行知教研吧 · 全站样式（单文件，改主题只改这里的变量）
+   ------------------------------------------------------------
+   配色全部走 CSS 变量，切换靠 <html data-theme="键名">（app/theme.py）。
+   下面的规则里**不要再写死颜色** —— 新加组件时要是找不到合适的变量，
+   就往每套主题里补一个，别用十六进制硬编码，否则深色主题下会瞎。
    ============================================================ */
+
+/* ---------- 不随主题变的量 ---------- */
 :root{
-  --ink:#1F2328; --ink2:#3D4450; --muted:#6B7280; --faint:#9CA3AF;
-  --line:#E5E7EB; --line2:#D1D5DB;
-  --bg:#F6F7F9; --card:#FFFFFF; --soft:#F3F4F6;
-  --brand:#185FA5; --brand-d:#0C447C; --brand-l:#E6F1FB; --brand-l2:#F7FBFF;
-  --ok:#1D9E75; --ok-l:#E1F5EE; --ok-d:#0F6E56;
-  --warn:#BA7517; --warn-l:#FAEEDA; --warn-d:#854F0B;
-  --danger:#E24B4A; --danger-l:#FCEBEB; --danger-d:#A32D2D;
-  --purple:#534AB7; --purple-l:#EEEDFE;
-  --teal:#0F766E; --teal-l:#DCF2F0;
+  --r:12px; --r-sm:8px;
+  --shadow:none;
+  --on-brand:#FFFFFF;          /* 实心色块（主色/成功色）上的文字色 */
+  --font-head:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+              "Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+              "Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+
+/* ---------- 1. 藏青（默认）· 专业清爽 ---------- */
+html,html[data-theme="cangqing"]{
+  --ink:#17202B; --ink2:#3C4A5A; --muted:#64748B; --faint:#94A3B8;
+  --line:#E2E8F0; --line2:#CBD5E1;
+  --bg:#F4F7FB; --card:#FFFFFF; --soft:#EEF3F9;
+  --brand:#1D5FA8; --brand-d:#144B87; --brand-l:#E7F1FB; --brand-l2:#F7FBFF;
+  --brand-b:#BBD6EF;
+  --ok:#12876A; --ok-l:#E1F4ED; --ok-d:#0B6A52; --ok-b:#A6E3CE;
+  --warn:#B07215; --warn-l:#FBEEDA; --warn-d:#8A560C; --warn-b:#F2CE8B;
+  --danger:#DC4A48; --danger-l:#FCEBEB; --danger-d:#A32D2D; --danger-b:#F5BDBD;
+  --purple:#534AB7; --purple-l:#EEEDFE; --purple-d:#3C3489;
+  --teal:#0F766E; --teal-l:#DAF2F0;
   --rose:#A8325E; --rose-l:#FBE7EF;
   --orange:#C2410C; --orange-l:#FDEADC;
   --slate:#334155; --slate-l:#E7ECF2;
+  --r:14px; --r-sm:9px;
+  --shadow:0 1px 2px rgba(23,32,43,.04), 0 6px 18px -14px rgba(23,32,43,.35);
+}
+
+/* ---------- 2. 墨卷 · 米白纸感 + 宋体标题 ---------- */
+html[data-theme="mojuan"]{
+  --ink:#2A241C; --ink2:#4B4237; --muted:#7C7164; --faint:#A79A88;
+  --line:#E7DECD; --line2:#D5C8B1;
+  --bg:#F6F1E7; --card:#FFFDF7; --soft:#EFE7D9;
+  --brand:#3A4E75; --brand-d:#2B3A58; --brand-l:#E6EAF2; --brand-l2:#F8F9FC;
+  --brand-b:#C3CEDF;
+  --ok:#2E7550; --ok-l:#E3EFE7; --ok-d:#1F573A; --ok-b:#AFD6C2;
+  --warn:#9A6A18; --warn-l:#F6EBD3; --warn-d:#77510F; --warn-b:#E2C99B;
+  --danger:#A83A32; --danger-l:#F8E7E4; --danger-d:#7F2A23; --danger-b:#E2B4AE;
+  --purple:#5B4B86; --purple-l:#EBE7F3; --purple-d:#453868;
+  --teal:#2A6E68; --teal-l:#DFEEEB;
+  --rose:#96324F; --rose-l:#F7E5EA;
+  --orange:#A54C1E; --orange-l:#F8E7D9;
+  --slate:#4A4239; --slate-l:#EDE6DA;
+  --r:6px; --r-sm:4px;
+  --font-head:"Songti SC","STSong","SimSun","Noto Serif SC",Georgia,serif;
+}
+
+/* ---------- 3. 竹野 · 墨绿安静 ---------- */
+html[data-theme="zhuye"]{
+  --ink:#1B2A22; --ink2:#3A4C42; --muted:#63796D; --faint:#93A69A;
+  --line:#DEE8DF; --line2:#C6D6C9;
+  --bg:#F2F7F2; --card:#FFFFFF; --soft:#E9F1EA;
+  --brand:#2C6B4E; --brand-d:#1F5138; --brand-l:#E2F0E7; --brand-l2:#F6FBF7;
+  --brand-b:#B2D3BF;
+  --ok:#1C8A5F; --ok-l:#DDF2E8; --ok-d:#146B49; --ok-b:#A5DCC5;
+  --warn:#A97417; --warn-l:#F7EDD6; --warn-d:#83590F; --warn-b:#E7CE9D;
+  --danger:#CF4B45; --danger-l:#FAE9E7; --danger-d:#9C322D; --danger-b:#EDBAB5;
+  --purple:#5A5A9B; --purple-l:#EAEAF6; --purple-d:#42427A;
+  --teal:#19766B; --teal-l:#DCF0ED;
+  --rose:#A03A5B; --rose-l:#F7E6EC;
+  --orange:#B25018; --orange-l:#FAE7D8;
+  --slate:#364B40; --slate-l:#E5EDE7;
+  --r:10px; --r-sm:7px;
+  --shadow:0 1px 2px rgba(27,42,34,.05);
+}
+
+/* ---------- 4. 陶白 · 杏白砖红 ---------- */
+html[data-theme="taobai"]{
+  --ink:#2E2620; --ink2:#4E4238; --muted:#7D6C5D; --faint:#AC9B88;
+  --line:#EDE1D3; --line2:#DCC9B3;
+  --bg:#FAF4EC; --card:#FFFCF7; --soft:#F3E9DC;
+  --brand:#B4522F; --brand-d:#8D3E21; --brand-l:#FBE7DD; --brand-l2:#FEF8F3;
+  --brand-b:#EBC3AF;
+  --ok:#2F7D57; --ok-l:#E2EFE7; --ok-d:#205B3D; --ok-b:#AFD8C3;
+  --warn:#A87418; --warn-l:#F8EDD6; --warn-d:#82580F; --warn-b:#E9CFA1;
+  --danger:#C0453B; --danger-l:#FAE6E3; --danger-d:#93312A; --danger-b:#EDBDB7;
+  --purple:#6B4B7D; --purple-l:#EFE6F2; --purple-d:#513758;
+  --teal:#21756C; --teal-l:#DEEFEC;
+  --rose:#A43457; --rose-l:#F8E5EB;
+  --orange:#B4551B; --orange-l:#FAE8D9;
+  --slate:#4E4038; --slate-l:#EFE6DD;
   --r:12px; --r-sm:8px;
-  --shadow:none;
+  --shadow:0 1px 2px rgba(46,38,32,.05), 0 8px 20px -16px rgba(180,82,47,.45);
+}
+
+/* ---------- 5. 墨夜 · 深色护眼 ----------
+   深色下「实心色块」是浅色，所以 --on-brand 要反过来用深字。 */
+html[data-theme="moye"]{
+  --ink:#E7ECF2; --ink2:#C2CCD8; --muted:#8B98A8; --faint:#6A7788;
+  --line:#2A3340; --line2:#3B4757;
+  --bg:#12171D; --card:#1A2028; --soft:#232B36;
+  --brand:#5C9BD6; --brand-d:#8CC3EE; --brand-l:#1B2C3D; --brand-l2:#16212C;
+  --brand-b:#2C4A66;
+  --ok:#3EB98B; --ok-l:#16302A; --ok-d:#6ED3AC; --ok-b:#245A47;
+  --warn:#D9A24B; --warn-l:#342810; --warn-d:#EDBE77; --warn-b:#5A4720;
+  --danger:#E26A6C; --danger-l:#3A2023; --danger-d:#F09294; --danger-b:#5C3034;
+  --purple:#9C93E0; --purple-l:#2A2740; --purple-d:#B9B2EE;
+  --teal:#3EB8AC; --teal-l:#15302D;
+  --rose:#E387A5; --rose-l:#3A2130;
+  --orange:#E08A5A; --orange-l:#3A2718;
+  --slate:#B8C2CE; --slate-l:#29313C;
+  --on-brand:#0C1116;
+  --r:12px; --r-sm:8px;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 26px -18px rgba(0,0,0,.9);
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
   background:var(--bg); color:var(--ink);
-  font:400 14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-family:var(--font-body);
+  font-size:14px;line-height:1.65;font-weight:400;
   -webkit-font-smoothing:antialiased;
 }
 a{color:var(--brand);text-decoration:none}
 a:hover{text-decoration:underline}
-h1{font-size:20px;font-weight:500;margin:0 0 8px}
-h2{font-size:15px;font-weight:500;margin:0 0 12px;display:flex;align-items:center;gap:8px}
-h3{font-size:14px;font-weight:500;margin:0 0 8px}
+h1{font-size:20px;font-weight:500;margin:0 0 8px;font-family:var(--font-head)}
+h2{font-size:15px;font-weight:500;margin:0 0 12px;display:flex;align-items:center;gap:8px;
+  font-family:var(--font-head)}
+h3{font-size:14px;font-weight:500;margin:0 0 8px;font-family:var(--font-head)}
 p{margin:0 0 8px}
 .muted{color:var(--muted)}
 .faint{color:var(--faint)}
@@ -46,10 +144,11 @@ p{margin:0 0 8px}
   position:sticky;top:0;z-index:50;height:56px;display:flex;align-items:center;gap:20px;
   padding:0 22px;background:var(--card);border-bottom:1px solid var(--line);
 }
-.logo{display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;color:var(--ink)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:500;font-size:15px;color:var(--ink);
+  font-family:var(--font-head)}
 .logo:hover{text-decoration:none}
 .logo-mark{
-  width:24px;height:24px;border-radius:7px;background:var(--brand);color:#fff;
+  width:24px;height:24px;border-radius:7px;background:var(--brand);color:var(--on-brand);
   display:inline-flex;align-items:center;justify-content:center;font-size:12px;flex:none;
 }
 .logo-mark.lg{width:40px;height:40px;font-size:18px;border-radius:11px}
@@ -69,7 +168,7 @@ p{margin:0 0 8px}
 .bell:hover{background:var(--soft);color:var(--ink);text-decoration:none}
 .bell .badge{
   position:absolute;top:1px;right:0;min-width:15px;height:15px;border-radius:8px;
-  background:var(--danger);color:#fff;font-size:10px;line-height:15px;text-align:center;padding:0 3px;
+  background:var(--danger);color:var(--on-brand);font-size:10px;line-height:15px;text-align:center;padding:0 3px;
 }
 .me{display:flex;align-items:center;gap:10px;padding-left:12px;border-left:1px solid var(--line)}
 .me-link{display:flex;align-items:center;gap:7px;color:var(--ink);font-size:13px}
@@ -93,7 +192,7 @@ p{margin:0 0 8px}
 }
 .card{
   background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  padding:18px 20px;margin-bottom:16px;
+  padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow);
 }
 .card:last-child{margin-bottom:0}
 .empty{padding:12px 0;color:var(--muted)}
@@ -107,11 +206,11 @@ p{margin:0 0 8px}
   white-space:nowrap;text-decoration:none;transition:background .12s;
 }
 .btn:hover{background:var(--soft);text-decoration:none}
-.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
 .btn.pri:hover{background:var(--brand-d)}
-.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:var(--on-brand)}
 .btn.ok:hover{background:var(--ok-d)}
-.btn.danger{color:var(--danger);border-color:#F7C1C1}
+.btn.danger{color:var(--danger);border-color:var(--danger-b)}
 .btn.danger:hover{background:var(--danger-l)}
 .btn.sm{height:29px;padding:0 11px;font-size:12.5px}
 .btn.xs{height:25px;padding:0 9px;font-size:12px}
@@ -136,13 +235,13 @@ p{margin:0 0 8px}
 .t-c-ok{background:var(--ok-l);color:var(--ok-d)}
 .t-c-warn{background:var(--warn-l);color:var(--warn-d)}
 .t-c-danger{background:var(--danger-l);color:var(--danger-d)}
-.t-c-purple{background:var(--purple-l);color:#3C3489}
+.t-c-purple{background:var(--purple-l);color:var(--purple-d)}
 .t-c-teal{background:var(--teal-l);color:var(--teal)}
 .t-c-rose{background:var(--rose-l);color:var(--rose)}
 .t-c-orange{background:var(--orange-l);color:var(--orange)}
 .t-c-slate{background:var(--slate-l);color:var(--slate)}
 .t-c-soft{background:var(--soft);color:var(--muted)}
-.t-grp{background:var(--purple-l);color:#3C3489}
+.t-grp{background:var(--purple-l);color:var(--purple-d)}
 .t-pin{background:var(--danger-l);color:var(--danger-d)}
 .t-featured{background:var(--warn-l);color:var(--warn-d)}
 .t-ok{background:var(--ok-l);color:var(--ok-d)}
@@ -209,7 +308,8 @@ p{margin:0 0 8px}
 .trow{display:flex;gap:14px;padding:13px 0;border-bottom:1px solid var(--line);align-items:flex-start}
 .tlist .trow:last-child{border-bottom:0;padding-bottom:2px}
 .trow .main{min-width:0;flex:1}
-.trow .ttl{font-size:14px;font-weight:500;margin-bottom:5px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.trow .ttl{font-size:14px;font-weight:500;margin-bottom:5px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  font-family:var(--font-head)}
 .trow .tmeta{font-size:12px;color:var(--faint);display:flex;gap:13px;flex-wrap:wrap}
 .trow .cnt{flex:none;text-align:right;font-size:12px;color:var(--faint);min-width:62px;align-items:center}
 .trow .cnt b{display:block;font-size:15px;font-weight:500;color:var(--ink)}
@@ -257,7 +357,7 @@ p{margin:0 0 8px}
 }
 .uprow .uprog{height:3px;background:var(--soft);border-radius:2px;flex:1;overflow:hidden}
 .uprow .uprog i{display:block;height:100%;width:0;background:var(--brand);transition:width .2s}
-.uprow.err{border-color:#F7C1C1;background:var(--danger-l)}
+.uprow.err{border-color:var(--danger-b);background:var(--danger-l)}
 
 /* ---------------- 表单 ---------------- */
 .fld{display:block;margin-bottom:15px;font-size:13px}
@@ -316,12 +416,12 @@ p{margin:0 0 8px}
 .kcode{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--ink2)}
 
 /* ---------------- 任务卡 ---------------- */
-.taskcard{border-color:#B5D4F4;background:var(--brand-l2);margin-top:16px}
+.taskcard{border-color:var(--brand-b);background:var(--brand-l2);margin-top:16px}
 .taskcard h2{font-weight:500}
 .tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:14px}
 .tgrid .lbl{font-size:12px;color:var(--faint);margin-bottom:2px}
 .tgrid .val{font-size:13px}
-.assign-box{margin-top:14px;border-top:1px solid #B5D4F4;padding-top:12px}
+.assign-box{margin-top:14px;border-top:1px solid var(--brand-b);padding-top:12px}
 .assign-box summary{cursor:pointer;font-size:13px;color:var(--brand-d)}
 .review{display:flex;flex-direction:column;gap:6px}
 .score-in{width:64px!important;padding:4px 8px!important;font-size:12.5px!important}
@@ -454,11 +554,11 @@ p{margin:0 0 8px}
 .flashes{margin-bottom:14px;display:flex;flex-direction:column;gap:8px}
 .flash{
   padding:10px 14px;border-radius:var(--r-sm);font-size:13px;
-  background:var(--brand-l);color:var(--brand-d);border:1px solid #B5D4F4;
+  background:var(--brand-l);color:var(--brand-d);border:1px solid var(--brand-b);
 }
-.flash-ok{background:var(--ok-l);color:var(--ok-d);border-color:#9FE1CB}
-.flash-error{background:var(--danger-l);color:var(--danger-d);border-color:#F7C1C1}
-.flash-warn{background:var(--warn-l);color:var(--warn-d);border-color:#FAC775}
+.flash-ok{background:var(--ok-l);color:var(--ok-d);border-color:var(--ok-b)}
+.flash-error{background:var(--danger-l);color:var(--danger-d);border-color:var(--danger-b)}
+.flash-warn{background:var(--warn-l);color:var(--warn-d);border-color:var(--warn-b)}
 
 /* ---------------- 登录 ---------------- */
 .login-wrap{display:flex;justify-content:center;padding:56px 0 40px}
@@ -528,9 +628,9 @@ p{margin:0 0 8px}
 .modal-box h3{font-size:15px;font-weight:500;margin:0 0 8px}
 .modal-msg{margin:0 0 18px;color:var(--ink2);font-size:13.5px;line-height:1.7;white-space:pre-line}
 .modal-acts{display:flex;justify-content:flex-end;gap:8px}
-.modal-acts .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+.modal-acts .btn.danger{background:var(--danger);border-color:var(--danger);color:var(--on-brand)}
 .modal-acts .btn.danger:hover{background:var(--danger-d)}
-.modal-acts .btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.modal-acts .btn.pri{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
 .modal-acts .btn.pri:hover{background:var(--brand-d)}
 
 /* ---------------- 回收站 ----------------
@@ -547,12 +647,12 @@ p{margin:0 0 8px}
    ③ 完成态：变灰 + 划线，沉到列表末尾 */
 .todo-pin{
   display:flex;align-items:center;gap:12px;
-  background:var(--brand-l);border:1px solid #CFE3F7;border-radius:var(--r);
+  background:var(--brand-l);border:1px solid var(--brand-b);border-radius:var(--r);
   padding:12px 16px;margin-bottom:14px;color:var(--ink);
 }
 .todo-pin:hover{text-decoration:none;border-color:var(--brand)}
 .todo-pin-ic{
-  width:28px;height:28px;border-radius:8px;background:var(--brand);color:#fff;
+  width:28px;height:28px;border-radius:8px;background:var(--brand);color:var(--on-brand);
   display:inline-flex;align-items:center;justify-content:center;font-size:15px;flex:none;
 }
 .todo-pin-main{display:flex;flex-direction:column;min-width:0}
@@ -591,7 +691,7 @@ p{margin:0 0 8px}
 .todo-check{margin:0;display:flex}
 .tcheck{
   width:20px;height:20px;flex:none;padding:0;display:inline-flex;align-items:center;
-  justify-content:center;font-size:13px;line-height:1;color:#fff;cursor:pointer;
+  justify-content:center;font-size:13px;line-height:1;color:var(--on-brand);cursor:pointer;
   border:1.5px solid var(--line2);border-radius:5px;background:var(--card);
 }
 .tcheck:hover{border-color:var(--brand)}
@@ -614,3 +714,43 @@ p{margin:0 0 8px}
 }
 .todo-item.done .todo-text{color:var(--faint);text-decoration:line-through}
 .todo-item.done .todo-meta,.todo-item.done .todo-handle{color:var(--faint)}
+
+/* ---------------- 后台 · 外观主题选择 ----------------
+   缩略图不是截图，是用三个色块现画的迷你版页面 —— 换主题时它自己也跟着变色，
+   但那样就看不出差异了，所以卡片里的迷你版**一律用手绘的固定色**（来自 swatches）。 */
+.theme-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+  gap:14px;margin-top:16px;
+}
+.theme-form{margin:0;display:block}
+.theme-card{
+  display:block;width:100%;padding:0;text-align:left;cursor:pointer;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  font:inherit;color:var(--ink);overflow:hidden;transition:border-color .12s,transform .12s;
+}
+.theme-card:hover{border-color:var(--brand);transform:translateY(-1px)}
+.theme-card.on{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-l)}
+.th-prev{display:block;padding:9px 9px 0;height:104px;overflow:hidden;
+  box-shadow:inset 0 0 0 1px rgba(128,128,128,.14)}
+.th-prev-top{
+  display:flex;align-items:center;gap:5px;height:16px;padding:0 6px;border-radius:5px 5px 0 0;
+}
+.th-dot{width:7px;height:7px;border-radius:2px;flex:none}
+.th-ln{width:26px;height:3px;border-radius:2px;opacity:.35}
+.th-ln.short{width:13px}
+.th-prev-body{display:flex;flex-direction:column;gap:5px;padding-top:6px}
+.th-card{display:block;padding:6px 7px;border-radius:4px;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.th-bar{display:block;height:3px;border-radius:2px;opacity:.3;margin-bottom:4px}
+.th-bar:last-child{margin-bottom:0}
+.th-bar.w70{width:70%}
+.th-bar.w55{width:55%}
+.th-bar.w45{width:45%}
+.th-meta{display:block;padding:10px 12px 12px;border-top:1px solid var(--line)}
+.th-name{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500}
+.th-desc{display:block;margin-top:3px;font-size:12px;color:var(--muted);line-height:1.5}
+.th-swatches{display:flex;gap:4px;margin-top:8px}
+.th-swatches i{
+  width:14px;height:14px;border-radius:4px;display:block;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);
+}
